@@ -14,7 +14,7 @@ const notifications = [
 ];
 
 const Home = () => {
-  const { user } = useAuth();
+  const { user, isDeviceRecognized } = useAuth();
 
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -48,30 +48,55 @@ const Home = () => {
 
   return (
     <div className="mx-4 space-y-6 pt-4 pb-20">
-      {/* Donation Summary Card */}
+      {/* Welcome Card */}
       <div className="bg-white rounded-xl shadow p-5 flex flex-col items-center text-center">
-        <div className="text-xs uppercase text-gray-400 mb-1">Total Donated</div>
-        <div className="text-3xl font-bold text-primary-700">{formatCurrency(user?.total_donations || 0)}</div>
-        <div className="mt-2">
-          <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
-            {user ? 'Thank you for your support!' : 'Welcome to ABU Endowment'}
-          </span>
-        </div>
+        {user && isDeviceRecognized ? (
+          <>
+            <div className="text-2xl font-bold text-gray-900 mb-2">
+              Welcome back, {user.name}! 👋
+            </div>
+            <div className="text-sm text-gray-600 mb-3">
+              Thank you for your continued support
+            </div>
+            <div className="text-xs uppercase text-gray-400 mb-1">Total Donated</div>
+            <div className="text-3xl font-bold text-primary-700">{formatCurrency(user?.total_donations || 0)}</div>
+          </>
+        ) : (
+          <>
+            <div className="text-2xl font-bold text-gray-900 mb-2">
+              Welcome to ABU Endowment
+            </div>
+            <div className="text-sm text-gray-600 mb-3">
+              Support our university through your generous donations
+            </div>
+            <div className="text-xs uppercase text-gray-400 mb-1">Make a Difference</div>
+            <div className="text-3xl font-bold text-primary-700">₦0</div>
+          </>
+        )}
       </div>
 
       {/* Quick Actions */}
       <div className="grid grid-cols-3 gap-4">
-        <button className="flex flex-col items-center bg-primary-50 rounded-lg p-3 hover:bg-primary-100 transition">
+        <button 
+          onClick={() => window.location.href = '/donations'}
+          className="flex flex-col items-center bg-primary-50 rounded-lg p-3 hover:bg-primary-100 transition"
+        >
           <ArrowUpRightIcon className="h-6 w-6 text-primary-600" />
           <span className="text-xs mt-1 font-medium text-primary-700">Donate</span>
         </button>
-        <button className="flex flex-col items-center bg-primary-50 rounded-lg p-3 hover:bg-primary-100 transition">
+        <button 
+          onClick={() => window.location.href = '/projects'}
+          className="flex flex-col items-center bg-primary-50 rounded-lg p-3 hover:bg-primary-100 transition"
+        >
           <UserPlusIcon className="h-6 w-6 text-primary-600" />
-          <span className="text-xs mt-1 font-medium text-primary-700">Invite</span>
+          <span className="text-xs mt-1 font-medium text-primary-700">Projects</span>
         </button>
-        <button className="flex flex-col items-center bg-primary-50 rounded-lg p-3 hover:bg-primary-100 transition">
+        <button 
+          onClick={() => window.location.href = '/contacts'}
+          className="flex flex-col items-center bg-primary-50 rounded-lg p-3 hover:bg-primary-100 transition"
+        >
           <ClockIcon className="h-6 w-6 text-primary-600" />
-          <span className="text-xs mt-1 font-medium text-primary-700">History</span>
+          <span className="text-xs mt-1 font-medium text-primary-700">Contact</span>
         </button>
       </div>
 

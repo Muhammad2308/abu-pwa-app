@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getDeviceFingerprint } from '../utils/deviceFingerprint';
 
 // Create axios instance with base configuration
 const api = axios.create({
@@ -7,6 +8,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
+    'X-Device-Fingerprint': getDeviceFingerprint(),
   },
 });
 
