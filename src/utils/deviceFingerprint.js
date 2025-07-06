@@ -6,7 +6,7 @@ const generateDeviceFingerprint = () => {
     navigator.userAgent,
     navigator.language,
     navigator.platform,
-    screen.width + 'x' + screen.height,
+    window.screen.width + 'x' + window.screen.height,
     new Date().getTimezoneOffset(),
     navigator.hardwareConcurrency || '',
     navigator.deviceMemory || '',

@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { FaCreditCard, FaUser, FaSearch } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import api, { paymentsAPI, getCsrfCookie } from '../services/api';
+import { getDeviceFingerprint } from '../utils/deviceFingerprint';
 
 const Donations = () => {
   const [searchParams] = useSearchParams();
