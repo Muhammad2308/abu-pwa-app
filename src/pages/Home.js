@@ -14,9 +14,7 @@ const notifications = [
 ];
 
 const Home = () => {
-  const { user, getUserTier, getNextTierProgress } = useAuth();
-  const tier = getUserTier();
-  const progress = getNextTierProgress();
+  const { user } = useAuth();
 
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -54,28 +52,10 @@ const Home = () => {
       <div className="bg-white rounded-xl shadow p-5 flex flex-col items-center text-center">
         <div className="text-xs uppercase text-gray-400 mb-1">Total Donated</div>
         <div className="text-3xl font-bold text-primary-700">{formatCurrency(user?.total_donations || 0)}</div>
-        <div className="mt-2 flex items-center gap-2">
-          <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${
-            tier === 'Gold' ? 'bg-yellow-400 text-yellow-900' :
-            tier === 'Silver' ? 'bg-gray-300 text-gray-800' :
-            tier === 'Bronze' ? 'bg-amber-400 text-amber-900' :
-            'bg-gray-100 text-gray-500'
-          }`}>
-            {tier || 'New'} Tier
+        <div className="mt-2">
+          <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+            {user ? 'Thank you for your support!' : 'Welcome to ABU Endowment'}
           </span>
-          <span className="text-xs text-gray-500">Next: {formatCurrency(progress.next)}</span>
-        </div>
-        <div className="w-full mt-3">
-          <div className="h-2 bg-gray-200 rounded-full">
-            <div
-              className="h-2 rounded-full bg-primary-600 transition-all"
-              style={{ width: `${progress.progress}%` }}
-            ></div>
-          </div>
-          <div className="flex justify-between text-xs text-gray-400 mt-1">
-            <span>{formatCurrency(progress.current)}</span>
-            <span>{formatCurrency(progress.next)}</span>
-          </div>
         </div>
       </div>
 

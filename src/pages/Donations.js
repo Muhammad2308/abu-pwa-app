@@ -57,7 +57,7 @@ const Donations = () => {
       if (isAuthenticated && user) {
         setCurrentStep('payment');
       } else {
-        setCurrentStep('welcome');
+        setCurrentStep('donor-type');
       }
     }
   }, [isAuthenticated, user, loading]);
@@ -149,22 +149,36 @@ const Donations = () => {
     e.preventDefault();
     
     try {
+      // First try to update the alumni record
       const response = await api.put(`/api/donors/${alumniData.id}`, alumniUpdateForm);
       
-      // Now proceed to verification
-      const verificationResult = await registerAndVerify({
-        ...alumniUpdateForm,
-        donor_type: 'addressable_alumni',
-        id: alumniData.id
-      });
-      
-      if (verificationResult.success) {
-        setCurrentStep('verification');
+      if (response.data.success) {
+        // Now proceed to verification
+        const verificationResult = await registerAndVerify({
+          ...alumniUpdateForm,
+          donor_type: 'addressable_alumni',
+          id: alumniData.id
+        });
+        
+        if (verificationResult.success) {
+          setCurrentStep('verification');
+        }
+      } else {
+        toast.error(response.data.message || 'Error updating alumni information');
       }
       
     } catch (error) {
       console.error('Alumni update error:', error);
-      toast.error('Error updating alumni information. Please try again.');
+      
+      if (error.code === 'ERR_NETWORK') {
+        toast.error('Network error. Please check your internet connection and try again.');
+      } else if (error.response?.status === 404) {
+        toast.error('Alumni record not found. Please check your registration number.');
+      } else if (error.response?.status === 422) {
+        toast.error('Invalid data. Please check your information and try again.');
+      } else {
+        toast.error('Error updating alumni information. Please try again.');
+      }
     }
   };
 
@@ -290,74 +304,41 @@ const Donations = () => {
     );
   }
 
-  // Welcome Screen
-  if (currentStep === 'welcome') {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-4">Welcome to ABU Endowment</h1>
-            <p className="text-gray-600 mb-6">Support our university through your generous donations</p>
-          </div>
-
-          <div className="space-y-4">
-            <button
-              onClick={() => setCurrentStep('login')}
-              className="w-full py-3 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold"
-            >
-              I'm a returning donor
-            </button>
-            
-            <button
-              onClick={() => setCurrentStep('donor-type')}
-              className="w-full py-3 px-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold"
-            >
-              I'm a new donor
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Simple Login Screen
-  if (currentStep === 'login') {
+  // Donor Type Selection with Login Option
+  if (currentStep === 'donor-type') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
           <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome Back!</h2>
-            <p className="text-gray-600">Enter your email or phone to continue</p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome to ABU Endowment</h2>
+            <p className="text-gray-600">Are you a returning donor or new to our platform?</p>
           </div>
 
-          <form onSubmit={handleSimpleLogin} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Email or Phone Number
-              </label>
-              <input
-                type="text"
-                name="email_or_phone"
-                required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter your email or phone"
-              />
-            </div>
-
+          <div className="space-y-4 mb-6">
             <button
-              type="submit"
-              className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+              onClick={() => setCurrentStep('login')}
+              className="w-full p-4 border border-gray-300 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors text-left"
             >
-              Continue
+              <div className="flex items-center">
+                <FaPhone className="w-6 h-6 text-blue-600 mr-3" />
+                <div>
+                  <h3 className="font-semibold text-gray-900">Returning Donor</h3>
+                  <p className="text-sm text-gray-600">I've donated before</p>
+                </div>
+              </div>
             </button>
-          </form>
 
-          <div className="text-center mt-4">
             <button
-              onClick={() => setCurrentStep('welcome')}
-              className="text-blue-600 hover:text-blue-700 font-medium"
+              onClick={() => setCurrentStep('donor-type-select')}
+              className="w-full p-4 border border-gray-300 rounded-lg hover:border-green-500 hover:bg-green-50 transition-colors text-left"
             >
-              ← Back
+              <div className="flex items-center">
+                <FaUsers className="w-6 h-6 text-green-600 mr-3" />
+                <div>
+                  <h3 className="font-semibold text-gray-900">New Donor</h3>
+                  <p className="text-sm text-gray-600">First time donating</p>
+                </div>
+              </div>
             </button>
           </div>
         </div>
@@ -365,8 +346,8 @@ const Donations = () => {
     );
   }
 
-  // Donor Type Selection
-  if (currentStep === 'donor-type') {
+  // Donor Type Selection (for new donors only)
+  if (currentStep === 'donor-type-select') {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
@@ -405,7 +386,7 @@ const Donations = () => {
 
           <div className="text-center mt-6">
             <button
-              onClick={() => setCurrentStep('welcome')}
+              onClick={() => setCurrentStep('donor-type')}
               className="text-gray-600 hover:text-gray-700 font-medium"
             >
               ← Back
@@ -747,6 +728,51 @@ const Donations = () => {
             <p className="text-sm text-gray-500">
               Didn't receive the email? Check your spam folder or contact support.
             </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Simple Login Screen
+  if (currentStep === 'login') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
+          <div className="text-center mb-6">
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome Back!</h2>
+            <p className="text-gray-600">Enter your email or phone to continue</p>
+          </div>
+
+          <form onSubmit={handleSimpleLogin} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Email or Phone Number
+              </label>
+              <input
+                type="text"
+                name="email_or_phone"
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Enter your email or phone"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+            >
+              Continue
+            </button>
+          </form>
+
+          <div className="text-center mt-4">
+            <button
+              onClick={() => setCurrentStep('donor-type')}
+              className="text-blue-600 hover:text-blue-700 font-medium"
+            >
+              ← Back
+            </button>
           </div>
         </div>
       </div>
