@@ -93,6 +93,13 @@ export const donationsAPI = {
   getSummary: () => api.get('/api/donations/summary'),
 };
 
+// Payments API calls
+export const paymentsAPI = {
+  initialize: (paymentData) => api.post('/api/payments/initialize', paymentData),
+  verify: (reference) => api.get(`/api/payments/verify/${reference}`),
+  webhook: (webhookData) => api.post('/api/payments/webhook', webhookData),
+};
+
 // Rankings API calls
 export const rankingsAPI = {
   getAll: () => api.get('/api/rankings'),
@@ -110,6 +117,8 @@ export const donorsAPI = {
   searchByRegNumber: (regNumber) => api.get(`/api/donors/search/${encodeURIComponent(regNumber)}`),
   searchByPhone: (phone) => api.get(`/api/donors/search/phone/${encodeURIComponent(phone)}`),
   searchByEmail: (email) => api.get(`/api/donors/search/email/${encodeURIComponent(email)}`),
+  update: (id, donorData) => api.put(`/api/donors/${id}`, donorData),
+  create: (donorData) => api.post('/api/donors', donorData),
 };
 
 // Utility functions

@@ -14,6 +14,7 @@ const Register = lazy(() => import('./pages/Register'));
 const AddressableAlumni = lazy(() => import('./pages/register/AddressableAlumni'));
 const NonAddressableAlumni = lazy(() => import('./pages/register/NonAddressableAlumni'));
 const Friends = lazy(() => import('./pages/register/Friends'));
+const BackendTest = lazy(() => import('./components/BackendTest'));
 
 function App() {
   return (
@@ -31,6 +32,7 @@ function App() {
             <Route path="/contacts" element={<Layout><Contacts /></Layout>} />
             <Route path="/profile" element={<Layout><Profile /></Layout>} />
             <Route path="/donations" element={<Layout><Donations /></Layout>} />
+            <Route path="/test" element={<BackendTest />} />
           </Routes>
         </Suspense>
       </Router>

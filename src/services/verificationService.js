@@ -13,14 +13,20 @@ export const verificationAPI = {
   // Verify email code
   verifyEmailCode: (email, code) => api.post('/api/verification/verify-email', { email, code }),
   
-  // Create device session after verification
-  createDeviceSession: (sessionData) => api.post('/api/sessions/create', sessionData),
+  // Create device session after verification (for new registrations)
+  createDeviceSession: (sessionData) => api.post('/api/session/create', sessionData),
+  
+  // Login with existing donor (for existing users) - Now properly separated from user authentication
+  loginWithDonor: (email, deviceInfo) => api.post('/api/session/login-with-donor', { 
+    email, 
+    deviceInfo 
+  }),
   
   // Check if device is recognized
-  checkDeviceSession: (deviceInfo) => api.post('/api/sessions/check', deviceInfo),
+  checkDeviceSession: (deviceInfo) => api.post('/api/session/check', deviceInfo),
   
-  // Login with device session
-  loginWithDevice: (credentials) => api.post('/api/sessions/login', credentials),
+  // Logout device session
+  logout: () => api.post('/api/session/logout'),
 };
 
 export const generateVerificationCode = () => {

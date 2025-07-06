@@ -21,3 +21,6 @@ serviceWorkerRegistration.unregister();
 // to log results (for example: reportWebVitals(console.log))
 // or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
 reportWebVitals();
+
+// Note: The "Download the React DevTools" message in console is normal in development
+// It's just a helpful reminder to install React DevTools browser extension
