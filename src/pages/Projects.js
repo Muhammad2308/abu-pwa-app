@@ -2,9 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { FaHandHoldingHeart } from 'react-icons/fa';
-
-const BASE_URL = 'http://127.0.0.1:8000/';
-const PLACEHOLDER_IMAGE = 'https://via.placeholder.com/400x200?text=No+Image';
+import { getBaseUrl } from '../services/api';
 
 const Projects = () => {
   const navigate = useNavigate();
@@ -34,7 +32,7 @@ const Projects = () => {
         {projects.map(project => (
           <div key={project.id} className="bg-white rounded-xl shadow hover:shadow-lg transition overflow-hidden flex flex-col">
             <img
-              src={project.icon_image ? BASE_URL + 'storage/' + project.icon_image : PLACEHOLDER_IMAGE}
+              src={project.icon_image ? getBaseUrl() + 'storage/' + project.icon_image : 'https://via.placeholder.com/400x200?text=No+Image'}
               alt={project.project_title}
               className="h-32 w-full object-cover"
             />
@@ -43,7 +41,7 @@ const Projects = () => {
                 project.photos.map((photo, idx) => (
                   <img
                     key={photo.id}
-                    src={BASE_URL + 'storage/' + photo.body_image}
+                    src={getBaseUrl() + 'storage/' + photo.body_image}
                     alt={project.project_title + ' photo ' + (idx + 1)}
                     className="h-12 w-16 object-cover rounded border border-gray-200 flex-shrink-0"
                   />

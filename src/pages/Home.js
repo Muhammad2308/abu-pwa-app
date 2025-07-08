@@ -4,9 +4,7 @@ import { formatCurrency } from '../services/api';
 import { ArrowUpRightIcon, UserPlusIcon, ClockIcon } from '@heroicons/react/24/outline';
 import api from '../services/api';
 import { FaArrowLeft, FaArrowRight, FaHandHoldingHeart } from 'react-icons/fa';
-
-const BASE_URL = 'http://127.0.0.1:8000/';
-const PLACEHOLDER_IMAGE = 'https://via.placeholder.com/400x200?text=No+Image';
+import { getBaseUrl } from '../services/api';
 
 const notifications = [
   { id: 1, message: 'Thank you for your recent donation!', time: '2h ago' },
@@ -147,7 +145,7 @@ const Home = () => {
                   onMouseLeave={() => setIsPaused(false)}
                 >
                   <img
-                    src={project.icon_image ? BASE_URL + 'storage/' + project.icon_image : PLACEHOLDER_IMAGE}
+                    src={project.icon_image ? getBaseUrl() + 'storage/' + project.icon_image : 'https://via.placeholder.com/400x200?text=No+Image'}
                     alt={project.project_title}
                     className="h-28 w-40 object-cover rounded-md mb-3 border"
                     style={{ margin: '0 auto' }}

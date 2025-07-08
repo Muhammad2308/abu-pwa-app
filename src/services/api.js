@@ -1,9 +1,11 @@
 import axios from 'axios';
 import { getDeviceFingerprint } from '../utils/deviceFingerprint';
 
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api';
+
 // Create axios instance with base configuration
 const api = axios.create({
-  baseURL: 'http://localhost:8000',
+  baseURL: API_BASE_URL,
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
@@ -138,6 +140,11 @@ export const formatDate = (dateString) => {
     month: 'long',
     day: 'numeric',
   });
+};
+
+// Utility to get the base URL for images (strip trailing /api if present)
+export const getBaseUrl = () => {
+  return API_BASE_URL.replace(/\/api$/, '/');
 };
 
 export default api; 
