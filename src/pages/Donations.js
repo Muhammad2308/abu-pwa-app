@@ -59,6 +59,21 @@ const Donations = () => {
     }
   }, [country, stateName, lgaData]);
 
+  // Add at the top of the component:
+  const [projects, setProjects] = useState([]);
+
+  // Fetch all projects on mount
+  useEffect(() => {
+    api.get('/api/projects')
+      .then(res => setProjects(res.data))
+      .catch(() => setProjects([]));
+  }, []);
+
+  // Helper to get selected project by title
+  const selectedProject = projects.find(
+    p => p.project_title === projectFromQuery
+  );
+
   // --- Registration Form Steps ---
   function parseName(fullName) {
     const parts = fullName.trim().split(' ');
@@ -277,15 +292,14 @@ const Donations = () => {
     try {
       await getCsrfCookie();
       
+      // Add a helper to get the selected project object from the projectFromQuery
       const metadata = {
         name: donationData.name,
         phone: donationData.phone,
-        endowment: isEndowment ? 'yes' : 'no'
+        endowment: selectedProject ? 'no' : 'yes'
       };
-      
-      // Only add project_id if it's a valid project (not endowment)
-      if (!isEndowment && projectFromQuery && !isNaN(projectFromQuery)) {
-        metadata.project_id = projectFromQuery;
+      if (selectedProject) {
+        metadata.project_id = selectedProject.id;
       }
       
       const paymentData = {
@@ -596,14 +610,8 @@ const Donations = () => {
 
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-4">
-              {isEndowment ? 'Make an Endowment Donation' : 'Support This Project'}
+              Thank you for contributing to {selectedProject ? selectedProject.project_title : 'the Endowment Fund'}!
             </h1>
-            <p className="text-gray-600">
-              {isEndowment 
-                ? 'Thank you for supporting ABU Endowment Fund' 
-                : 'Thank you for supporting this specific project'
-              }
-            </p>
           </div>
 
           {/* Project Details */}
