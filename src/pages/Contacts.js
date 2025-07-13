@@ -1,5 +1,4 @@
 import React from 'react';
-import toast from 'react-hot-toast';
 
 const dummyContacts = [
   {
@@ -41,7 +40,7 @@ const dummyContacts = [
 ];
 
 const handleInvite = (name) => {
-  toast.success(`Invitation sent to ${name}!`);
+  // Removed toast.success
 };
 
 const Contacts = () => {

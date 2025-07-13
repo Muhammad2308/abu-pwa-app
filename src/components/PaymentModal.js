@@ -75,8 +75,7 @@ const PaymentModal = ({ open, onClose, onPay, amount, project }) => {
             className="w-full bg-yellow-400 text-primary-900 py-2 px-4 rounded-md hover:bg-yellow-500 transition font-semibold flex items-center justify-center gap-2"
           >
             <img src="https://flutterwave.com/images/logo-colored.svg" alt="Flutterwave" className="h-5" />
-            Pay ₦{amount} with Flutterwave
-          </button>
+            Pay {formatNaira(amount)} with Paystack          </button>
         </form>
       </div>
     </div>

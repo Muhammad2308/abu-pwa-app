@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { FaMobile, FaEnvelope, FaArrowLeft, FaCheck } from 'react-icons/fa';
-import toast from 'react-hot-toast';
 
 const VerificationModal = ({ isOpen, onClose, onSuccess, donorData }) => {
   const { 
@@ -29,7 +28,7 @@ const VerificationModal = ({ isOpen, onClose, onSuccess, donorData }) => {
 
   const handleSendSMS = async () => {
     if (!donorData?.phone) {
-      toast.error('Phone number is required');
+      // toast.error('Phone number is required'); // Removed toast
       return;
     }
     
@@ -42,7 +41,7 @@ const VerificationModal = ({ isOpen, onClose, onSuccess, donorData }) => {
 
   const handleSendEmail = async () => {
     if (!donorData?.email) {
-      toast.error('Email is required');
+      // toast.error('Email is required'); // Removed toast
       return;
     }
     
@@ -55,7 +54,7 @@ const VerificationModal = ({ isOpen, onClose, onSuccess, donorData }) => {
 
   const handleVerifySMS = async () => {
     if (!smsCode.trim()) {
-      toast.error('Please enter the SMS verification code');
+      // toast.error('Please enter the SMS verification code'); // Removed toast
       return;
     }
     
@@ -68,7 +67,7 @@ const VerificationModal = ({ isOpen, onClose, onSuccess, donorData }) => {
 
   const handleVerifyEmail = async () => {
     if (!emailCode.trim()) {
-      toast.error('Please enter the email verification code');
+      // toast.error('Please enter the email verification code'); // Removed toast
       return;
     }
     

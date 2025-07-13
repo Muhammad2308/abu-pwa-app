@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useAuth } from '../contexts/AuthContext';
-import toast from 'react-hot-toast';
 
 const dummyUser = {
   first_name: 'Amina',
@@ -27,7 +26,6 @@ const Profile = () => {
     // In a real app, send to backend here
     updateUser && updateUser(data);
     setEditing(false);
-    toast.success('Profile updated successfully!');
   };
 
   return (

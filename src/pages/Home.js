@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { formatCurrency } from '../services/api';
+import { formatNaira, donationsAPI } from '../services/api';
 import { ArrowUpRightIcon, UserPlusIcon, ClockIcon } from '@heroicons/react/24/outline';
 import api from '../services/api';
 import { FaArrowLeft, FaArrowRight, FaHandHoldingHeart } from 'react-icons/fa';
 import { getBaseUrl } from '../services/api';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { getDeviceFingerprint } from '../utils/deviceFingerprint';
 
 const notifications = [
   { id: 1, message: 'Thank you for your recent donation!', time: '2h ago' },
@@ -12,13 +14,19 @@ const notifications = [
 ];
 
 const Home = () => {
-  const { user, isDeviceRecognized } = useAuth();
+  const { user, isDeviceRecognized, checkDeviceRecognition } = useAuth();
 
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const sliderRef = React.useRef(null);
   const [isPaused, setIsPaused] = useState(false);
   const [animationDuration, setAnimationDuration] = useState(12); // default duration
+  const [totalDonated, setTotalDonated] = useState(0);
+  const [debugInfo, setDebugInfo] = useState({ fingerprint: '', history: null });
+
+  const location = useLocation();
+  const navigate = useNavigate();
+  const thankYou = location.state?.thankYou;
 
   useEffect(() => {
     api.get('/api/projects')
@@ -28,6 +36,39 @@ const Home = () => {
       })
       .catch(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (thankYou) {
+      const timer = setTimeout(() => {
+        navigate('/', { replace: true, state: {} });
+      }, 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [thankYou, navigate]);
+
+  useEffect(() => {
+    if (user && isDeviceRecognized) {
+      const fingerprint = getDeviceFingerprint();
+      donationsAPI.getHistory().then(res => {
+        const donations = res.data.donations || [];
+        const sum = donations.reduce((acc, d) => acc + Number(d.amount || 0), 0);
+        setTotalDonated(sum);
+        setDebugInfo({ fingerprint, history: res.data });
+      }).catch((err) => {
+        setTotalDonated(0);
+        setDebugInfo({ fingerprint, history: err?.response?.data || err.message });
+      });
+    } else {
+      setTotalDonated(0);
+      setDebugInfo({ fingerprint: getDeviceFingerprint(), history: null });
+    }
+  }, [user, isDeviceRecognized]);
+
+  useEffect(() => {
+    if (!loading && !user && !isDeviceRecognized) {
+      navigate('/donations');
+    }
+  }, [loading, user, isDeviceRecognized, navigate]);
 
   // Arrow click handlers
   const handleArrow = (dir) => {
@@ -57,7 +98,26 @@ const Home = () => {
               Thank you for your continued support
             </div>
             <div className="text-xs uppercase text-gray-400 mb-1">Total Donated</div>
-            <div className="text-3xl font-bold text-primary-700">{formatCurrency(user?.total_donations || 0)}</div>
+            <div className="text-3xl font-bold text-primary-700 mb-2">{formatNaira(totalDonated)}</div>
+
+            {/* Progress Bar for Donation Tiers */}
+            <div className="w-full max-w-md mx-auto mb-6">
+              {/* Bar container */}
+              <div className="flex h-3 rounded-lg overflow-hidden border border-gray-300">
+                {/* Tier 1: 1 - 100,000 */}
+                <div className={`flex-1 ${totalDonated >= 1 ? 'bg-gray-300' : 'bg-gray-300'}`}></div>
+                {/* Tier 2: 100,000 - 999,999 */}
+                <div className={`flex-1 ${totalDonated >= 100000 ? 'bg-orange-300' : 'bg-gray-300'}`}></div>
+                {/* Tier 3: 1,000,000+ */}
+                <div className={`flex-1 ${totalDonated >= 1000000 ? 'bg-green-500' : 'bg-gray-200'}`}></div>
+              </div>
+              {/* Tier labels */}
+              <div className="flex justify-between text-xs mt-1 px-1">
+                <span className="text-gray-700 font-semibold">Tier 1</span>
+                <span className="text-orange-500 font-semibold">Tier 2</span>
+                <span className="text-green-600 font-semibold">Tier 3</span>
+              </div>
+            </div>
           </>
         ) : (
           <>
@@ -152,7 +212,7 @@ const Home = () => {
                   />
                   <div className="font-semibold text-base text-center mb-1 line-clamp-2">{project.project_title}</div>
                   <div className="text-gray-600 text-xs text-center mb-2 line-clamp-2" style={{display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'}}>{project.project_description}</div>
-                  <div className="text-xs text-gray-500 mb-2">Raised: {formatCurrency(project.amount || 0)}</div>
+                  <div className="text-xs text-gray-500 mb-2">Raised: {formatNaira(project.amount || 0)}</div>
                   <button
                     className="mt-2 bg-blue-100 text-blue-700 py-0.5 px-2 rounded flex items-center gap-1 text-xs font-semibold shadow-sm hover:bg-blue-200 hover:text-blue-900 transition-all duration-150"
                     style={{ fontSize: '0.75rem' }}

@@ -66,7 +66,7 @@ export const verificationAPI = {
 - Code input with validation
 - Resend functionality with countdown
 
-#### 5. Updated Donations Page (`src/pages/Donations.js`)
+#### 5. Updated Donations Page (`src/pagess.js`)
 - Alumni verification flow
 - Pre-populated forms with alumni data
 - Integration with verification system

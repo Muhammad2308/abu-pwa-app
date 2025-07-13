@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { FaCreditCard, FaUser, FaSearch, FaBug } from 'react-icons/fa';
 import toast from 'react-hot-toast';
-import api, { paymentsAPI, getCsrfCookie } from '../services/api';
+import api, { paymentsAPI, getCsrfCookie, formatNaira } from '../services/api';
 import { getDeviceFingerprint } from '../utils/deviceFingerprint';
 import BackendTest from '../components/BackendTest';
 import countries from '../utils/countries';
 
 const Donations = () => {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { user, isDeviceRecognized, loading, createDonor, updateDonor, searchAlumni } = useAuth();
   const projectFromQuery = searchParams.get('project') || '';
   const isEndowment = !projectFromQuery;
@@ -304,7 +305,7 @@ const Donations = () => {
       
       const paymentData = {
         email: donationData.email,
-        amount: donationData.amount * 100, // Convert to kobo
+        amount: donationData.amount, // Send as naira, no multiplication
         device_fingerprint: getDeviceFingerprint(),
         callback_url: `${window.location.origin}/donations`,
         metadata: metadata
@@ -323,7 +324,17 @@ const Donations = () => {
       const popup = new window.PaystackPop();
       popup.resumeTransaction(access_code);
       
-      toast.success('Payment popup opened! Please complete your payment.');
+      // toast.success('Payment popup opened! Please complete your payment.');
+      
+      // After payment popup, redirect to home with thank you message
+      navigate('/', {
+        state: {
+          thankYou: {
+            project: selectedProject ? selectedProject.project_title : 'the Endowment Fund',
+            amount: donationData.amount
+          }
+        }
+      });
       
     } catch (error) {
       console.error('Payment error:', error);
@@ -624,8 +635,8 @@ const Donations = () => {
                 {projectDetails.description}
               </p>
               <div className="text-sm text-blue-700">
-                <p><strong>Target:</strong> ₦{projectDetails.target_amount?.toLocaleString() || 'N/A'}</p>
-                <p><strong>Raised:</strong> ₦{projectDetails.amount?.toLocaleString() || '0'}</p>
+                <p><strong>Target:</strong> {formatNaira(projectDetails.target_amount)}</p>
+                <p><strong>Raised:</strong> {formatNaira(projectDetails.amount)}</p>
               </div>
             </div>
           )}
@@ -719,7 +730,7 @@ const Donations = () => {
               <FaCreditCard className="w-5 h-5" />
               {processingPayment ? 'Processing...' : 
                alumniData ? 'Update & Continue' : 
-               `Pay ₦${donationData.amount || '0'} ${isEndowment ? 'to Endowment' : 'to Project'}`
+               `Pay ${formatNaira(donationData.amount)} ${isEndowment ? 'to Endowment' : 'to Project'}`
               }
             </button>
           </form>

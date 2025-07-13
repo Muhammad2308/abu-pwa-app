@@ -30,7 +30,6 @@ export const AuthProvider = ({ children }) => {
       if (response.data.recognized) {
         setUser(response.data.donor);
         setIsDeviceRecognized(true);
-        toast.success(`Welcome back, ${response.data.donor.name}!`);
       } else {
         setUser(null);
         setIsDeviceRecognized(false);
@@ -60,16 +59,14 @@ export const AuthProvider = ({ children }) => {
           donor_id: donor.id
         });
         
-        toast.success('Account created successfully!');
         return { success: true, donor };
       } else {
-        toast.error(response.data.message || 'Failed to create account');
-        return { success: false, message: response.data.message };
+        const message = response.data.message || 'Failed to create account';
+        return { success: false, message };
       }
     } catch (error) {
       console.error('Create donor error:', error);
       const message = error.response?.data?.message || 'Failed to create account';
-      toast.error(message);
       return { success: false, message };
     }
   };
@@ -80,26 +77,38 @@ export const AuthProvider = ({ children }) => {
       const response = await api.put(`/api/donors/${donorId}`, donorData);
       
       if (response.data.success) {
-        const donor = response.data.donor;
+        const donor = response.data.donor || response.data.data;
         setUser(donor);
         setIsDeviceRecognized(true);
         
-        // Create device session
-        await api.post('/api/device/session', {
-          device_fingerprint: getDeviceFingerprint(),
-          donor_id: donor.id
-        });
+        // Create device session (handle different response structures)
+        const donorIdForSession = donor?.id || donorId;
+        if (donorIdForSession) {
+          await api.post('/api/device/session', {
+            device_fingerprint: getDeviceFingerprint(),
+            donor_id: donorIdForSession
+          });
+        }
         
-        toast.success('Profile updated successfully!');
         return { success: true, donor };
       } else {
-        toast.error(response.data.message || 'Failed to update profile');
-        return { success: false, message: response.data.message };
+        const message = response.data.message || 'Failed to update profile';
+        return { success: false, message };
       }
     } catch (error) {
       console.error('Update donor error:', error);
+      console.error('Error response:', error.response?.data);
+      
+      // Handle validation errors (422)
+      if (error.response?.status === 422) {
+        const validationErrors = error.response.data.errors;
+        if (validationErrors) {
+          const errorMessages = Object.values(validationErrors).flat().join(', ');
+          return { success: false, message: errorMessages };
+        }
+      }
+      
       const message = error.response?.data?.message || 'Failed to update profile';
-      toast.error(message);
       return { success: false, message };
     }
   };
@@ -107,16 +116,29 @@ export const AuthProvider = ({ children }) => {
   // Search addressable alumni
   const searchAlumni = async (regNumber) => {
     try {
+      console.log('Making API call to search alumni:', regNumber);
       const response = await api.get(`/api/donors/search/${regNumber}`);
+      console.log('API response:', response.data);
       
-      if (response.data.success) {
+      // Check if we have data in the response
+      if (response.data && response.data.data) {
+        return { success: true, donor: response.data.data };
+      } else if (response.data && response.data.success) {
         return { success: true, donor: response.data.donor };
       } else {
-        return { success: false, message: 'Alumni not found' };
+        return { success: false, message: response.data.message || 'Alumni not found' };
       }
     } catch (error) {
       console.error('Search alumni error:', error);
-      return { success: false, message: 'Alumni not found' };
+      console.error('Error response:', error.response?.data);
+      
+      if (error.response?.status === 404) {
+        return { success: false, message: 'Alumni record not found' };
+      } else if (error.code === 'ERR_NETWORK') {
+        return { success: false, message: 'Network error - please check your connection' };
+      } else {
+        return { success: false, message: error.response?.data?.message || 'Search failed' };
+      }
     }
   };
 
@@ -125,7 +147,6 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
     setIsDeviceRecognized(false);
     localStorage.removeItem('device_fingerprint');
-    toast.success('Session cleared');
   };
 
   const value = {

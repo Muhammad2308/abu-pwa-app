@@ -45,13 +45,17 @@ const Layout = ({ children }) => {
                 <FaArrowLeft className="w-4 h-4 text-gray-600" />
               </button>
             )}
-            {/* Logo with click functionality */}
+            {/* Logo with click functionality and attached text */}
             <button
               onClick={handleLogoClick}
               className="flex items-center transition-transform duration-150 hover:scale-105"
               aria-label="Go to home"
             >
               <img src={abuLogo} alt="ABU Logo" className="h-10 w-auto" />
+              <div className="flex flex-col justify-center ml-3 h-10 text-left">
+                <span className="text-sm font-bold leading-tight text-gray-800" style={{lineHeight: '1.1'}}>ABU Endowment</span>
+                <span className="text-xs font-bold text-gray-800 leading-none">& Crowd Funding</span>
+              </div>
             </button>
           </div>
           

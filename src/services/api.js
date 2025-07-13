@@ -1,12 +1,12 @@
 import axios from 'axios';
 import { getDeviceFingerprint } from '../utils/deviceFingerprint';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000/api';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000';
 
 // Create axios instance with base configuration
 const api = axios.create({
   baseURL: API_BASE_URL,
-  withCredentials: true,
+  withCredentials: true, // This is correct!
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -93,7 +93,11 @@ export const projectsAPI = {
 // Donations API calls
 export const donationsAPI = {
   create: (donationData) => api.post('/api/donations', donationData),
-  getHistory: () => api.get('/api/donations/history'),
+  getHistory: () => api.get('/api/donations/history', {
+    headers: {
+      'X-Device-Fingerprint': getDeviceFingerprint(),
+    },
+  }),
   getSummary: () => api.get('/api/donations/summary'),
 };
 
@@ -126,11 +130,13 @@ export const donorsAPI = {
 };
 
 // Utility functions
-export const formatCurrency = (amount) => {
+export const formatNaira = (amount) => {
+  if (amount == null) amount = 0;
   return new Intl.NumberFormat('en-NG', {
     style: 'currency',
     currency: 'NGN',
-    minimumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(amount);
 };
 
@@ -144,7 +150,7 @@ export const formatDate = (dateString) => {
 
 // Utility to get the base URL for images (strip trailing /api if present)
 export const getBaseUrl = () => {
-  return API_BASE_URL.replace(/\/api$/, '/');
+  return API_BASE_URL.endsWith('/') ? API_BASE_URL : API_BASE_URL + '/';
 };
 
 export default api; 
