@@ -11,16 +11,31 @@ const Projects = () => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    api.get('/api/projects')
-      .then(res => {
-        setProjects(res.data);
-        setLoading(false);
-      })
-      .catch(err => {
-        setError('Failed to load projects');
-        setLoading(false);
-      });
+    const cachedProjects = localStorage.getItem('abu_projects');
+    if (cachedProjects) {
+      setProjects(JSON.parse(cachedProjects));
+      setLoading(false);
+    } else {
+      setLoading(true);
+      api.get('/api/projects')
+        .then(res => {
+          setProjects(res.data);
+          localStorage.setItem('abu_projects', JSON.stringify(res.data));
+          setLoading(false);
+        })
+        .catch(err => {
+          setError('Failed to load projects');
+          setLoading(false);
+        });
+    }
   }, []);
+
+  // When projects update, update cache
+  useEffect(() => {
+    if (projects && projects.length > 0) {
+      localStorage.setItem('abu_projects', JSON.stringify(projects));
+    }
+  }, [projects]);
 
   if (loading) return <div className="p-8 text-center">Loading projects...</div>;
   if (error) return <div className="p-8 text-center text-red-500">{error}</div>;

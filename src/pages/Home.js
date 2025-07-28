@@ -20,39 +20,81 @@ const Home = () => {
   const [loading, setLoading] = useState(true);
   const sliderRef = React.useRef(null);
   const [isPaused, setIsPaused] = useState(false);
-  const [animationDuration, setAnimationDuration] = useState(12); // default duration
+  // Add state to track active image index for each project card
+  const [activeImages, setActiveImages] = useState({});
+  // Add missing state declarations
   const [totalDonated, setTotalDonated] = useState(0);
   const [debugInfo, setDebugInfo] = useState({ fingerprint: '', history: null });
+  const [animationDuration, setAnimationDuration] = useState(12); // default duration
+  const [messages, setMessages] = useState([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [messagesError, setMessagesError] = useState(null);
+
+  // Helper to get all images for a project (icon_image + photos)
+  const getProjectImages = (project) => {
+    const images = [];
+    if (project.icon_image) {
+      images.push({
+        url: getBaseUrl() + 'storage/' + project.icon_image,
+        key: 'icon_image',
+      });
+    }
+    if (project.photos && Array.isArray(project.photos)) {
+      project.photos.forEach((photo, idx) => {
+        if (photo.body_image) {
+          images.push({
+            url: getBaseUrl() + 'storage/' + photo.body_image,
+            key: 'photo_' + idx,
+          });
+        }
+      });
+    }
+    return images.length > 0 ? images : [{ url: 'https://via.placeholder.com/400x200?text=No+Image', key: 'placeholder' }];
+  };
 
   const location = useLocation();
   const navigate = useNavigate();
   const thankYou = location.state?.thankYou;
 
+  // On mount, try to load projects and totalDonated from localStorage
   useEffect(() => {
-    api.get('/api/projects')
-      .then(res => {
-        setProjects(res.data);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    const cachedProjects = localStorage.getItem('abu_projects');
+    if (cachedProjects) {
+      setProjects(JSON.parse(cachedProjects));
+      setLoading(false);
+    } else {
+      setLoading(true);
+      api.get('/api/projects')
+        .then(res => {
+          setProjects(res.data);
+          localStorage.setItem('abu_projects', JSON.stringify(res.data));
+          setLoading(false);
+        })
+        .catch(() => setLoading(false));
+    }
   }, []);
 
+  // When projects update, update cache
   useEffect(() => {
-    if (thankYou) {
-      const timer = setTimeout(() => {
-        navigate('/', { replace: true, state: {} });
-      }, 8000);
-      return () => clearTimeout(timer);
+    if (projects && projects.length > 0) {
+      localStorage.setItem('abu_projects', JSON.stringify(projects));
     }
-  }, [thankYou, navigate]);
+  }, [projects]);
 
+  // For totalDonated, cache per user
   useEffect(() => {
     if (user && isDeviceRecognized) {
+      const cacheKey = `abu_totalDonated_${user.id}`;
+      const cachedTotal = localStorage.getItem(cacheKey);
+      if (cachedTotal !== null) {
+        setTotalDonated(Number(cachedTotal));
+      }
       const fingerprint = getDeviceFingerprint();
       donationsAPI.getHistory().then(res => {
         const donations = res.data.donations || [];
         const sum = donations.reduce((acc, d) => acc + Number(d.amount || 0), 0);
         setTotalDonated(sum);
+        localStorage.setItem(cacheKey, sum);
         setDebugInfo({ fingerprint, history: res.data });
       }).catch((err) => {
         setTotalDonated(0);
@@ -63,6 +105,22 @@ const Home = () => {
       setDebugInfo({ fingerprint: getDeviceFingerprint(), history: null });
     }
   }, [user, isDeviceRecognized]);
+
+  // Fetch donor messages
+  useEffect(() => {
+    if (user && user.id) {
+      setMessagesLoading(true);
+      api.get(`/api/donor/${user.id}/messages`)
+        .then(res => {
+          setMessages(res.data || []);
+          setMessagesLoading(false);
+        })
+        .catch(err => {
+          setMessagesError('Failed to load messages');
+          setMessagesLoading(false);
+        });
+    }
+  }, [user]);
 
   useEffect(() => {
     if (!loading && !user && !isDeviceRecognized) {
@@ -84,6 +142,9 @@ const Home = () => {
     setAnimationDuration(6);
     setTimeout(() => setAnimationDuration(12), 800);
   };
+
+  // --- Slider Auto Scroll Logic ---
+  // Remove timer-based slider scroll useEffect
 
   return (
     <div className="mx-4 space-y-6 pt-4 pb-20">
@@ -184,9 +245,8 @@ const Home = () => {
           </button>
           <div
             ref={sliderRef}
-            className="flex items-center gap-6 animate-slide"
+            className="flex items-center gap-6"
             style={{
-              animation: projects.length > 0 && !isPaused ? `slide ${animationDuration}s linear infinite` : 'none',
               width: projects.length > 0 ? `${projects.length * 260}px` : '100%',
               overflowX: 'auto',
               scrollBehavior: 'smooth',
@@ -197,44 +257,52 @@ const Home = () => {
             ) : projects.length === 0 ? (
               <div className="text-center w-full">No projects found.</div>
             ) : (
-              [...projects, ...projects].map((project, idx) => (
-                <div
-                  key={project.id + '-' + idx}
-                  className="bg-white rounded-lg shadow-md hover:shadow-lg p-4 flex flex-col items-center min-w-[240px] max-w-[240px] mx-2 transition-shadow duration-200"
-                  onMouseEnter={() => setIsPaused(true)}
-                  onMouseLeave={() => setIsPaused(false)}
-                >
-                  <img
-                    src={project.icon_image ? getBaseUrl() + 'storage/' + project.icon_image : 'https://via.placeholder.com/400x200?text=No+Image'}
-                    alt={project.project_title}
-                    className="h-28 w-40 object-cover rounded-md mb-3 border"
-                    style={{ margin: '0 auto' }}
-                  />
-                  <div className="font-semibold text-base text-center mb-1 line-clamp-2">{project.project_title}</div>
-                  <div className="text-gray-600 text-xs text-center mb-2 line-clamp-2" style={{display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'}}>{project.project_description}</div>
-                  <div className="text-xs text-gray-500 mb-2">Raised: {formatNaira(project.amount || 0)}</div>
-                  <button
-                    className="mt-2 bg-blue-100 text-blue-700 py-0.5 px-2 rounded flex items-center gap-1 text-xs font-semibold shadow-sm hover:bg-blue-200 hover:text-blue-900 transition-all duration-150"
-                    style={{ fontSize: '0.75rem' }}
-                    onClick={() => window.location.href = `/donations?project=${encodeURIComponent(project.project_title)}`}
+              [...projects, ...projects].map((project, idx) => {
+                const images = getProjectImages(project);
+                const cardKey = project.id + '-' + idx;
+                const activeIdx = activeImages[cardKey] ?? 0;
+                return (
+                  <div
+                    key={cardKey}
+                    className="bg-white rounded-lg shadow-md hover:shadow-lg p-4 flex flex-col items-center min-w-[240px] max-w-[240px] mx-2 transition-shadow duration-200"
+                    onMouseEnter={() => setIsPaused(true)}
+                    onMouseLeave={() => setIsPaused(false)}
                   >
-                    <FaHandHoldingHeart className="text-xs" />
-                    Contribute
-                  </button>
-                </div>
-              ))
+                    <img
+                      src={images[activeIdx]?.url}
+                      alt={project.project_title}
+                      className="h-28 w-40 object-cover rounded-md mb-3 border"
+                      style={{ margin: '0 auto' }}
+                    />
+                    {/* Thumbnails */}
+                    <div className="flex gap-1 mb-2">
+                      {images.map((img, thumbIdx) => (
+                        <img
+                          key={img.key}
+                          src={img.url}
+                          alt={`Thumbnail ${thumbIdx + 1}`}
+                          className={`h-8 w-12 object-cover rounded border cursor-pointer ${activeIdx === thumbIdx ? 'ring-2 ring-primary-500' : 'opacity-70 hover:opacity-100'}`}
+                          onClick={() => setActiveImages((prev) => ({ ...prev, [cardKey]: thumbIdx }))}
+                          style={{ transition: 'box-shadow 0.2s, opacity 0.2s' }}
+                        />
+                      ))}
+                    </div>
+                    <div className="font-semibold text-base text-center mb-1 line-clamp-2">{project.project_title}</div>
+                    <div className="text-gray-600 text-xs text-center mb-2 line-clamp-2" style={{display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'}}>{project.project_description}</div>
+                    <div className="text-xs text-gray-500 mb-2">Raised: {formatNaira(project.amount || 0)}</div>
+                    <button
+                      className="mt-2 bg-blue-100 text-blue-700 py-0.5 px-2 rounded flex items-center gap-1 text-xs font-semibold shadow-sm hover:bg-blue-200 hover:text-blue-900 transition-all duration-150"
+                      style={{ fontSize: '0.75rem' }}
+                      onClick={() => window.location.href = `/donations?project=${encodeURIComponent(project.project_title)}`}
+                    >
+                      <FaHandHoldingHeart className="text-xs" />
+                      Contribute
+                    </button>
+                  </div>
+                );
+              })
             )}
           </div>
-          {/* Slider animation style */}
-          <style>{`
-            @keyframes slide {
-              0% { transform: translateX(0); }
-              100% { transform: translateX(-50%); }
-            }
-            .animate-slide:hover {
-              animation-play-state: paused !important;
-            }
-          `}</style>
         </div>
       </div>
 
@@ -245,12 +313,27 @@ const Home = () => {
           <h3 className="text-lg font-semibold">Notifications</h3>
         </div>
         <ul className="divide-y divide-gray-100 bg-white rounded-lg shadow">
-          {notifications.map((note) => (
-            <li key={note.id} className="px-4 py-2 flex justify-between items-center">
-              <span className="text-sm text-gray-700">{note.message}</span>
-              <span className="text-xs text-gray-400">{note.time}</span>
-            </li>
-          ))}
+          {messagesLoading ? (
+            <li className="px-4 py-2 text-center text-gray-500">Loading messages...</li>
+          ) : messagesError ? (
+            <li className="px-4 py-2 text-center text-red-500">{messagesError}</li>
+          ) : messages && messages.length > 0 ? (
+            messages.map((msg, idx) => (
+              <li key={msg.id || idx} className="px-4 py-2">
+                {msg.subject && (
+                  <span className="inline-block bg-blue-100 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded-full mb-2 mr-2 align-middle">
+                    {msg.subject}
+                  </span>
+                )}
+                <div className="bg-blue-50 text-blue-900 rounded-lg px-3 py-2 mb-1 mt-1" style={{marginTop: msg.subject ? '0.25rem' : 0}}>
+                  {msg.body || msg.message}
+                </div>
+                <div className="text-xs text-gray-400 mt-1">{msg.date_sent ? new Date(msg.date_sent).toLocaleString() : ''}</div>
+              </li>
+            ))
+          ) : (
+            <li className="px-4 py-2 text-center text-gray-400">No messages</li>
+          )}
         </ul>
       </div>
     </div>

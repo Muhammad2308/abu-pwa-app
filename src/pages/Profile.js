@@ -1,29 +1,43 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useAuth } from '../contexts/AuthContext';
-
-const dummyUser = {
-  first_name: 'Amina',
-  last_name: 'Bello',
-  email: 'amina.bello@email.com',
-  phone: '+2348012345678',
-  graduation_year: '2018',
-  faculty: 'Engineering',
-  department: 'Electrical Engineering',
-  donor_type: 'Alumni',
-};
+import countries from '../utils/countries';
 
 const Profile = () => {
   const { user, updateUser, logout, isAuthenticated } = useAuth();
   const [editing, setEditing] = useState(false);
-  const profileData = user || dummyUser;
+  const [profileImage, setProfileImage] = useState(() => localStorage.getItem('profile_image') || '');
+  const [imagePreview, setImagePreview] = useState(profileImage);
+  const profileData = user || {};
 
-  const { register, handleSubmit, reset, formState: { errors, isDirty, isSubmitting } } = useForm({
-    defaultValues: profileData,
+  const { register, handleSubmit, reset, setValue, formState: { errors, isDirty, isSubmitting } } = useForm({
+    defaultValues: {
+      name: profileData.name || '',
+      state: profileData.state || '',
+      city: profileData.city || '',
+      nationality: profileData.nationality || '',
+      email: profileData.email || '',
+      phone: profileData.phone || '',
+      profile_image: profileImage || '',
+    },
   });
 
+  const onImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setProfileImage(ev.target.result);
+        setImagePreview(ev.target.result);
+        localStorage.setItem('profile_image', ev.target.result);
+        setValue('profile_image', ev.target.result, { shouldDirty: true });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const onSubmit = (data) => {
-    // In a real app, send to backend here
+    // Save image path/data URL to backend
     updateUser && updateUser(data);
     setEditing(false);
   };
@@ -32,27 +46,71 @@ const Profile = () => {
     <div className="p-4 max-w-md mx-auto">
       <h1 className="text-2xl font-bold mb-4">Profile Management</h1>
       <form onSubmit={handleSubmit(onSubmit)} className="bg-white rounded-xl shadow p-4 space-y-4">
+        <div className="flex flex-col items-center mb-4">
+          <div className="relative w-24 h-24 mb-2">
+            <img
+              src={imagePreview || '/default-avatar.png'}
+              alt="Profile"
+              className="w-24 h-24 rounded-full object-cover border border-gray-300"
+            />
+            {editing && (
+              <input
+                type="file"
+                accept="image/*"
+                className="absolute inset-0 opacity-0 cursor-pointer"
+                style={{ width: '100%', height: '100%' }}
+                onChange={onImageChange}
+                tabIndex={-1}
+              />
+            )}
+          </div>
+          <input type="hidden" {...register('profile_image')} value={profileImage} />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Name</label>
+          <input
+            type="text"
+            {...register('name', { required: 'Name is required' })}
+            className="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 border-gray-300"
+            disabled={!editing}
+          />
+          {errors.name && <p className="text-xs text-red-600 mt-1">{errors.name.message}</p>}
+        </div>
         <div className="flex gap-4">
           <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700">First Name</label>
+            <label className="block text-sm font-medium text-gray-700">State</label>
             <input
               type="text"
-              {...register('first_name', { required: 'First name is required' })}
+              {...register('state', { required: 'State is required' })}
               className="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 border-gray-300"
               disabled={!editing}
             />
-            {errors.first_name && <p className="text-xs text-red-600 mt-1">{errors.first_name.message}</p>}
+            {errors.state && <p className="text-xs text-red-600 mt-1">{errors.state.message}</p>}
           </div>
           <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700">Last Name</label>
+            <label className="block text-sm font-medium text-gray-700">City (LGA)</label>
             <input
               type="text"
-              {...register('last_name', { required: 'Last name is required' })}
+              {...register('city', { required: 'City/LGA is required' })}
               className="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 border-gray-300"
               disabled={!editing}
             />
-            {errors.last_name && <p className="text-xs text-red-600 mt-1">{errors.last_name.message}</p>}
+            {errors.city && <p className="text-xs text-red-600 mt-1">{errors.city.message}</p>}
           </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Country of Residence</label>
+          <select
+            {...register('nationality', { required: 'Country is required' })}
+            className="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 border-gray-300"
+            disabled={!editing}
+          >
+            <option value="">Select Country</option>
+            {countries.map((country) => (
+              <option key={country} value={country}>{country}</option>
+            ))}
+          </select>
+          {errors.nationality && <p className="text-xs text-red-600 mt-1">{errors.nationality.message}</p>}
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700">Email</label>
@@ -73,48 +131,6 @@ const Profile = () => {
             disabled={!editing}
           />
           {errors.phone && <p className="text-xs text-red-600 mt-1">{errors.phone.message}</p>}
-        </div>
-        <div className="flex gap-4">
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700">Graduation Year</label>
-            <input
-              type="text"
-              {...register('graduation_year', { required: 'Graduation year is required' })}
-              className="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 border-gray-300"
-              disabled={!editing}
-            />
-            {errors.graduation_year && <p className="text-xs text-red-600 mt-1">{errors.graduation_year.message}</p>}
-          </div>
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700">Faculty</label>
-            <input
-              type="text"
-              {...register('faculty', { required: 'Faculty is required' })}
-              className="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 border-gray-300"
-              disabled={!editing}
-            />
-            {errors.faculty && <p className="text-xs text-red-600 mt-1">{errors.faculty.message}</p>}
-          </div>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Department</label>
-          <input
-            type="text"
-            {...register('department', { required: 'Department is required' })}
-            className="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 border-gray-300"
-            disabled={!editing}
-          />
-          {errors.department && <p className="text-xs text-red-600 mt-1">{errors.department.message}</p>}
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Donor Type</label>
-          <input
-            type="text"
-            {...register('donor_type', { required: 'Donor type is required' })}
-            className="mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 border-gray-300"
-            disabled={!editing}
-          />
-          {errors.donor_type && <p className="text-xs text-red-600 mt-1">{errors.donor_type.message}</p>}
         </div>
         <div className="flex gap-2 mt-4">
           {!editing ? (
@@ -140,6 +156,7 @@ const Profile = () => {
                 onClick={() => {
                   reset(profileData);
                   setEditing(false);
+                  setImagePreview(profileImage);
                 }}
               >
                 Cancel
