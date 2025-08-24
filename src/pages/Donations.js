@@ -668,28 +668,18 @@ const Donations = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Full Name *
                 </label>
-                <input
-                  type="text"
-                  value={donationData.name}
-                  onChange={(e) => setDonationData({...donationData, name: e.target.value})}
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter your full name"
-                />
+                <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-900">
+                  {donationData.name || 'Not provided'}
+                </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Email Address *
                 </label>
-                <input
-                  type="email"
-                  value={donationData.email}
-                  onChange={(e) => setDonationData({...donationData, email: e.target.value})}
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter your email"
-                />
+                <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-900">
+                  {donationData.email || 'Not provided'}
+                </div>
               </div>
             </div>
 
@@ -697,14 +687,9 @@ const Donations = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Phone Number *
               </label>
-              <input
-                type="tel"
-                value={donationData.phone}
-                onChange={(e) => setDonationData({...donationData, phone: e.target.value})}
-                required
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter your phone number"
-              />
+              <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-900">
+                {donationData.phone || 'Not provided'}
+              </div>
             </div>
 
             <div>
@@ -762,4 +747,4 @@ const Donations = () => {
   );
 };
 
-export default Donations; 
+export default Donations;

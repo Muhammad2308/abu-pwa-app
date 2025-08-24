@@ -11,23 +11,22 @@ const Projects = () => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const cachedProjects = localStorage.getItem('abu_projects');
-    if (cachedProjects) {
-      setProjects(JSON.parse(cachedProjects));
-      setLoading(false);
-    } else {
-      setLoading(true);
-      api.get('/api/projects')
-        .then(res => {
-          setProjects(res.data);
-          localStorage.setItem('abu_projects', JSON.stringify(res.data));
-          setLoading(false);
-        })
-        .catch(err => {
-          setError('Failed to load projects');
-          setLoading(false);
-        });
-    }
+    // Clear cache to ensure fresh data after deletions
+    localStorage.removeItem('abu_projects');
+    
+    setLoading(true);
+    api.get('/api/projects')
+      .then(res => {
+        // Filter out deleted projects (only show projects where deleted_at is NULL)
+        const activeProjects = res.data.filter(project => project.deleted_at === null || project.deleted_at === undefined);
+        setProjects(activeProjects);
+        localStorage.setItem('abu_projects', JSON.stringify(activeProjects));
+        setLoading(false);
+      })
+      .catch(err => {
+        setError('Failed to load projects');
+        setLoading(false);
+      });
   }, []);
 
   // When projects update, update cache
@@ -83,4 +82,4 @@ const Projects = () => {
   );
 };
 
-export default Projects; 
+export default Projects;

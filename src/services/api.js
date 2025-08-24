@@ -127,6 +127,7 @@ export const donorsAPI = {
   searchByEmail: (email) => api.get(`/api/donors/search/email/${encodeURIComponent(email)}`),
   update: (id, donorData) => api.put(`/api/donors/${id}`, donorData),
   create: (donorData) => api.post('/api/donors', donorData),
+  getWithoutRanking: () => api.get('/api/donors/without-ranking'),
 };
 
 // Utility functions
@@ -153,4 +154,4 @@ export const getBaseUrl = () => {
   return API_BASE_URL.endsWith('/') ? API_BASE_URL : API_BASE_URL + '/';
 };
 
-export default api; 
+export default api;
