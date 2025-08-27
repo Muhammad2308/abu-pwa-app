@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import Layout from './components/Layout';
+import PWAInstallPrompt from './components/PWAInstallPrompt';
 import './index.css';
 
 const Home = lazy(() => import('./pages/Home'));
@@ -35,6 +36,7 @@ function App() {
 
           </Routes>
         </Suspense>
+        <PWAInstallPrompt />
       </Router>
     </AuthProvider>
   );
