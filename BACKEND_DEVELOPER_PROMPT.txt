@@ -1,0 +1,155 @@
+═══════════════════════════════════════════════════════════════
+URGENT: Fix Donor Update Endpoint - Name Fields Being Combined
+═══════════════════════════════════════════════════════════════
+
+PROBLEM:
+The PUT /api/donors/{id} endpoint is combining name, surname, and other_name 
+into a single "name" column in the database. Each field should be saved to 
+its own column.
+
+CURRENT BEHAVIOR:
+All three fields (name, surname, other_name) are being saved under the 
+"name" column.
+
+EXPECTED BEHAVIOR:
+- "name" field → save to "name" column
+- "surname" field → save to "surname" column  
+- "other_name" field → save to "other_name" column
+
+REQUEST PAYLOAD (What Frontend Sends):
+
+1. Donor Update: PUT /api/donors/123
+Content-Type: application/json
+
+{
+  "name": "John",
+  "surname": "Doe",
+  "other_name": "Smith",
+  "email": "john.doe@example.com",
+  "phone": "1234567890",
+  ...
+}
+
+2. Payment Initialization: POST /api/payments/initialize
+Content-Type: application/json
+
+{
+  "email": "john.doe@example.com",
+  "amount": "100",
+  "metadata": {
+    "name": "John",           // ← SEPARATE field
+    "surname": "Doe",         // ← SEPARATE field
+    "other_name": "Smith",    // ← SEPARATE field
+    "phone": "1234567890",
+    "endowment": "yes",
+    "type": "endowment"
+  }
+}
+
+⚠️ IMPORTANT: Payment metadata also contains separate name fields!
+If your backend processes payment metadata to create/update donors, make sure 
+it saves name, surname, and other_name to their respective columns, NOT combined!
+
+WHAT TO CHECK:
+
+1. ✅ Verify database columns exist:
+   - donors.name (string)
+   - donors.surname (string)
+   - donors.other_name (nullable string)
+
+2. ✅ Update the controller method to save each field separately:
+   $donor->name = $request->input('name');
+   $donor->surname = $request->input('surname');
+   $donor->other_name = $request->input('other_name');
+
+3. ❌ Remove any code that combines fields:
+   // DON'T DO THIS:
+   $donor->name = $request->name . ' ' . $request->surname . ' ' . $request->other_name;
+
+4. ✅ Check for mutators in Donor model that might be combining fields
+
+5. ✅ Ensure validation accepts all three fields separately
+
+QUICK FIX EXAMPLE (Laravel):
+
+public function update(Request $request, $id)
+{
+    $donor = Donor::findOrFail($id);
+    
+    $validated = $request->validate([
+        'name' => 'required|string',
+        'surname' => 'required|string',
+        'other_name' => 'nullable|string',
+        // ... other fields
+    ]);
+    
+    // Save each field to its own column
+    $donor->name = $validated['name'];
+    $donor->surname = $validated['surname'];
+    $donor->other_name = $validated['other_name'] ?? null;
+    // ... update other fields
+    
+    $donor->save();
+    
+    return response()->json([
+        'success' => true,
+        'donor' => $donor
+    ]);
+}
+
+TESTING:
+After fix, test with:
+- name: "John"
+- surname: "Doe"
+- other_name: "Smith"
+
+Database should show:
+- name column = "John"
+- surname column = "Doe"
+- other_name column = "Smith"
+
+NOT all three in the name column!
+
+═══════════════════════════════════════════════════════════════
+
+🚨🚨🚨 CRITICAL: PAYMENT INITIALIZATION ERROR 🚨🚨🚨
+
+ERROR: POST /api/payments/initialize returns 500
+"NOT NULL constraint failed: donations.type"
+
+ISSUE:
+1. Donations table requires 'type' column (NOT NULL)
+2. Backend is NOT including 'type' when inserting donation
+3. Frontend IS sending type in metadata: "type": "endowment" or "type": "project"
+
+FIX REQUIRED IN PaymentController@initialize:
+
+// Extract type from metadata
+$type = $request->input('metadata.type');
+if (!$type) {
+    $type = ($request->input('metadata.endowment') === 'yes') ? 'endowment' : 'project';
+}
+
+// Include type in donations insert
+Donation::create([
+    'donor_id' => $donor->id,
+    'project_id' => $request->input('metadata.project_id'),
+    'amount' => $request->amount,
+    'endowment' => $request->input('metadata.endowment'),
+    'type' => $type,  // ← THIS IS MISSING! Add it!
+    'status' => 'pending',
+    'payment_reference' => $reference,
+]);
+
+ALSO: When creating/updating donor in payment flow, save SEPARATE fields:
+
+$donor->name = $request->input('metadata.name');
+$donor->surname = $request->input('metadata.surname');
+$donor->other_name = $request->input('metadata.other_name');
+$donor->email = $request->email;  // ← Update email too!
+$donor->phone = $request->input('metadata.phone');
+
+See BACKEND_PAYMENT_FIX.md for complete code example.
+
+═══════════════════════════════════════════════════════════════
+

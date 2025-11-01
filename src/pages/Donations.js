@@ -19,6 +19,8 @@ const Donations = () => {
   const [donationData, setDonationData] = useState({
     amount: '',
     name: '',
+    surname: '',
+    other_name: '',
     email: '',
     phone: ''
   });
@@ -27,6 +29,8 @@ const Donations = () => {
   
   // Alumni search states
   const [regNumber, setRegNumber] = useState('');
+  const [searchEmail, setSearchEmail] = useState('');
+  const [searchPhone, setSearchPhone] = useState('');
   const [alumniData, setAlumniData] = useState(null);
   const [searching, setSearching] = useState(false);
   
@@ -148,6 +152,8 @@ const Donations = () => {
       setDonationData({
         amount: '',
         name: user.name || '',
+        surname: user.surname || '',
+        other_name: user.other_name || '',
         email: user.email || '',
         phone: user.phone || ''
       });
@@ -172,16 +178,15 @@ const Donations = () => {
   // Handle alumni search
   const handleAlumniSearch = async (e) => {
     e.preventDefault();
-    if (!regNumber.trim()) {
-      toast.error('Please enter your registration number');
+    if (!regNumber.trim() && !searchEmail.trim() && !searchPhone.trim()) {
+      toast.error('Enter reg number, email, or phone');
       return;
     }
 
     setSearching(true);
     try {
-      console.log('Searching for alumni with reg number:', regNumber);
-      
-      const result = await searchAlumni(regNumber);
+      console.log('Searching alumni with:', { regNumber, email: searchEmail, phone: searchPhone });
+      const result = await searchAlumni({ regNumber, email: searchEmail, phone: searchPhone });
       console.log('Search result:', result);
       
       if (result.success) {
@@ -189,6 +194,8 @@ const Donations = () => {
         setDonationData({
           amount: '',
           name: result.donor.name || '',
+          surname: result.donor.surname || '',
+          other_name: result.donor.other_name || '',
           email: result.donor.email || '',
           phone: result.donor.phone || ''
         });
@@ -247,10 +254,14 @@ const Donations = () => {
     }
 
     // Send all the required fields from the alumni data
+    // IMPORTANT: Send name, surname, and other_name as SEPARATE fields
+    // DO NOT combine them into a single name field
     const updateData = {
-      name: donationData.name,
-      email: donationData.email,
-      phone: donationData.phone,
+      name: donationData.name || '',
+      surname: donationData.surname || '',
+      other_name: donationData.other_name && donationData.other_name.trim() ? donationData.other_name.trim() : null,
+      email: donationData.email || '',
+      phone: donationData.phone || '',
       // Include other required fields from the original alumni data
       reg_number: alumniData.reg_number,
       entry_year: alumniData.entry_year,
@@ -265,7 +276,12 @@ const Donations = () => {
       lga: alumniData.lga // Also include lga field in case backend expects it
     };
 
-    console.log('Updating alumni with data:', updateData);
+    // Log the exact structure being sent
+    console.log('Updating alumni with SEPARATE name fields:');
+    console.log('- name:', updateData.name);
+    console.log('- surname:', updateData.surname);
+    console.log('- other_name:', updateData.other_name);
+    console.log('Full updateData:', JSON.stringify(updateData, null, 2));
 
     const result = await updateDonor(alumniData.id, updateData);
     
@@ -283,8 +299,8 @@ const Donations = () => {
       return;
     }
 
-    if (!donationData.name || !donationData.email || !donationData.phone) {
-      toast.error('Please fill in all required fields');
+    if (!donationData.name || !donationData.surname || !donationData.email || !donationData.phone) {
+      toast.error('Please fill in all required fields (Name, Surname, Email, Phone)');
       return;
     }
 
@@ -293,11 +309,14 @@ const Donations = () => {
     try {
       await getCsrfCookie();
       
-      // Add a helper to get the selected project object from the projectFromQuery
+      // Prepare metadata with separate name fields
       const metadata = {
-        name: donationData.name,
+        name: donationData.name || '',
+        surname: donationData.surname || '',
+        other_name: donationData.other_name || null,
         phone: donationData.phone,
-        endowment: selectedProject ? 'no' : 'yes'
+        endowment: selectedProject ? 'no' : 'yes',
+        type: selectedProject ? 'project' : 'endowment'
       };
       if (selectedProject) {
         metadata.project_id = selectedProject.id;
@@ -305,13 +324,13 @@ const Donations = () => {
       
       const paymentData = {
         email: donationData.email,
-        amount: donationData.amount, // Send as naira, no multiplication
+        amount: donationData.amount,
         device_fingerprint: getDeviceFingerprint(),
         callback_url: `${window.location.origin}/donations`,
         metadata: metadata
       };
       
-      console.log('Sending payment data:', paymentData);
+      console.log('Initializing Paystack payment:', paymentData);
       
       const response = await paymentsAPI.initialize(paymentData);
 
@@ -320,21 +339,12 @@ const Donations = () => {
       // Load Paystack script
       await loadPaystackScript();
       
-      // Open payment popup
+      // Open Paystack payment popup
       const popup = new window.PaystackPop();
       popup.resumeTransaction(access_code);
       
-      // toast.success('Payment popup opened! Please complete your payment.');
-      
-      // After payment popup, redirect to home with thank you message
-      navigate('/', {
-        state: {
-          thankYou: {
-            project: selectedProject ? selectedProject.project_title : 'the Endowment Fund',
-            amount: donationData.amount
-          }
-        }
-      });
+      // After payment, redirect will be handled by Paystack callback
+      // The webhook will handle the donation record creation
       
     } catch (error) {
       console.error('Payment error:', error);
@@ -376,6 +386,87 @@ const Donations = () => {
     });
   };
 
+  // Handle Paystack callback - check URL params for payment reference
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const reference = params.get('reference');
+    const trxref = params.get('trxref'); // Paystack reference
+    const paymentRef = reference || trxref;
+    
+    if (paymentRef) {
+      console.log('Payment reference detected:', paymentRef);
+      
+      // Get project from URL params or current state
+      const urlProject = params.get('project');
+      const projectFromUrl = urlProject ? decodeURIComponent(urlProject) : null;
+      
+      // Payment completed - verify with backend
+      paymentsAPI.verify(paymentRef)
+        .then(response => {
+          console.log('Payment verification response:', response.data);
+          const paymentData = response.data.data || response.data;
+          const isSuccess = response.data.success || paymentData?.status === 'success';
+          
+          if (isSuccess) {
+            // Get amount from payment response or fallback
+            const amount = paymentData?.amount ? paymentData.amount / 100 : (donationData?.amount || 0);
+            
+            // Get project name from payment metadata, URL, or fallback
+            const projectFromMetadata = paymentData?.metadata?.project_title || paymentData?.metadata?.project;
+            const projectName = projectFromMetadata || projectFromUrl || selectedProject?.project_title || 'the Endowment Fund';
+            
+            toast.success(`Thank you! Your donation has been processed successfully! 🎉`);
+            
+            // Clean URL first
+            window.history.replaceState({}, document.title, window.location.pathname);
+            
+            // Redirect to home immediately with thank you message
+            setTimeout(() => {
+              navigate('/', {
+                state: {
+                  thankYou: {
+                    project: projectName,
+                    amount: amount
+                  }
+                },
+                replace: true
+              });
+            }, 500);
+          } else {
+            // Payment failed or pending
+            toast.error('Payment verification failed. Please contact support if payment was deducted.');
+          }
+        })
+        .catch(error => {
+          console.error('Payment verification error:', error);
+          // Still show success and redirect - webhook will handle verification
+          toast.success('Thank you! Your payment is being processed. You will receive a confirmation shortly.');
+          
+          // Get project name from URL or fallback
+          const urlProject = params.get('project');
+          const projectFromUrl = urlProject ? decodeURIComponent(urlProject) : null;
+          const projectName = projectFromUrl || selectedProject?.project_title || 'the Endowment Fund';
+          const amount = donationData?.amount || 0;
+          
+          // Clean URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+          
+          // Redirect to home
+          setTimeout(() => {
+            navigate('/', {
+              state: {
+                thankYou: {
+                  project: projectName,
+                  amount: amount
+                }
+              },
+              replace: true
+            });
+          }, 500);
+        });
+    }
+  }, [navigate, searchParams, selectedProject]);
+
   // Loading state
   if (loading) {
     return (
@@ -396,7 +487,7 @@ const Donations = () => {
           <div className="text-center mb-6">
             <FaSearch className="w-16 h-16 mx-auto mb-4 text-blue-600" />
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Find Your Record</h2>
-            <p className="text-gray-600">Enter your ABU registration number</p>
+            <p className="text-gray-600">Search with registration number, email, or phone</p>
           </div>
 
           <form onSubmit={handleAlumniSearch} className="space-y-4">
@@ -408,9 +499,32 @@ const Donations = () => {
                 type="text"
                 value={regNumber}
                 onChange={(e) => setRegNumber(e.target.value)}
-                required
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Enter your ABU registration number"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Email Address
+              </label>
+              <input
+                type="email"
+                value={searchEmail}
+                onChange={(e) => setSearchEmail(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Enter your email"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Phone Number
+              </label>
+              <input
+                type="tel"
+                value={searchPhone}
+                onChange={(e) => setSearchPhone(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Enter your phone number"
               />
             </div>
 
@@ -663,32 +777,76 @@ const Donations = () => {
           )}
 
           <form onSubmit={alumniData ? handleAlumniUpdate : handlePaymentSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Full Name *
+                  First Name *
                 </label>
-                <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-900">
-                  {donationData.name || 'Not provided'}
-                </div>
+                <input
+                  type="text"
+                  value={donationData.name || ''}
+                  onChange={(e) => setDonationData({...donationData, name: e.target.value})}
+                  required
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter your first name"
+                />
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Surname *
+                </label>
+                <input
+                  type="text"
+                  value={donationData.surname || ''}
+                  onChange={(e) => setDonationData({...donationData, surname: e.target.value})}
+                  required
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter your surname"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Other Name
+                </label>
+                <input
+                  type="text"
+                  value={donationData.other_name || ''}
+                  onChange={(e) => setDonationData({...donationData, other_name: e.target.value})}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter other name (optional)"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Email Address *
                 </label>
-                <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-900">
-                  {donationData.email || 'Not provided'}
-                </div>
+                <input
+                  type="email"
+                  value={donationData.email || ''}
+                  onChange={(e) => setDonationData({...donationData, email: e.target.value})}
+                  required
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter your email address"
+                />
               </div>
-            </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Phone Number *
-              </label>
-              <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-900">
-                {donationData.phone || 'Not provided'}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Phone Number *
+                </label>
+                <input
+                  type="tel"
+                  value={donationData.phone || ''}
+                  onChange={(e) => setDonationData({...donationData, phone: e.target.value})}
+                  required
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter your phone number"
+                />
               </div>
             </div>
 

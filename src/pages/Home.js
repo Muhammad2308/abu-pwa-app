@@ -8,6 +8,7 @@ import { FaArrowLeft, FaArrowRight, FaHandHoldingHeart, FaProjectDiagram, FaDona
 import { getBaseUrl } from '../services/api';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { getDeviceFingerprint } from '../utils/deviceFingerprint';
+import toast from 'react-hot-toast';
 
 const notifications = [
   { id: 1, message: 'Thank you for your recent donation!', time: '2h ago' },
@@ -32,44 +33,47 @@ const Home = () => {
   const [messagesError, setMessagesError] = useState(null);
   // Tab state
   const [activeTab, setActiveTab] = useState('projects');
-  // Donors state for Contact tab
-  const [donors, setDonors] = useState([]);
-  const [donorsLoading, setDonorsLoading] = useState(false);
-  const [donorsError, setDonorsError] = useState(null);
+  // Donation history state for Contact tab (changed from donors)
+  const [donationHistory, setDonationHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState(null);
 
-  // Fetch donors without ranking when Contact tab is active
+  // Get location state for thank you message - must be declared early
+  const location = useLocation();
+  const navigate = useNavigate();
+  const thankYou = location.state?.thankYou;
+
+  // Fetch donation history when Contact tab is active
   useEffect(() => {
-    if (activeTab === 'contact') {
-      setDonorsLoading(true);
-      setDonorsError(null);
-      donorsAPI.getWithoutRanking()
+    if (activeTab === 'contact' && user && isDeviceRecognized) {
+      setHistoryLoading(true);
+      setHistoryError(null);
+      donationsAPI.getHistory()
         .then(res => {
-          setDonors(res.data || []);
-          setDonorsLoading(false);
+          const donations = res.data.donations || res.data || [];
+          // Sort by most recent first
+          const sorted = donations.sort((a, b) => {
+            return new Date(b.created_at || b.createdAt || b.date) - new Date(a.created_at || a.createdAt || a.date);
+          });
+          setDonationHistory(sorted);
+          
+          // Also update total donated from history
+          const sum = sorted.reduce((acc, d) => acc + Number(d.amount || 0), 0);
+          setTotalDonated(sum);
+          
+          setHistoryLoading(false);
         })
         .catch(err => {
-          setDonorsError('Failed to load contacts');
-          setDonorsLoading(false);
+          setHistoryError('Failed to load donation history');
+          setHistoryLoading(false);
+          console.error('Donation history error:', err);
         });
+    } else if (activeTab === 'contact' && !user) {
+      setDonationHistory([]);
+      setHistoryError(null);
     }
-  }, [activeTab]);
+  }, [activeTab, user, isDeviceRecognized, thankYou]); // Refresh when thankYou state changes
 
-  // Handle invite functionality
-  const handleInvite = (donor) => {
-    const inviteUrl = `${window.location.origin}/register?ref=${donor.id}`;
-    
-    if (navigator.share) {
-      navigator.share({
-        title: 'Join ABU Endowment Fund',
-        text: `${donor.name} has invited you to join ABU Endowment Fund`,
-        url: inviteUrl
-      });
-    } else {
-      navigator.clipboard.writeText(inviteUrl).then(() => {
-        alert('Invite link copied to clipboard!');
-      });
-    }
-  };
 
   // Helper to get all images for a project (icon_image + photos)
   const getProjectImages = (project) => {
@@ -93,9 +97,32 @@ const Home = () => {
     return images.length > 0 ? images : [{ url: 'https://via.placeholder.com/400x200?text=No+Image', key: 'placeholder' }];
   };
 
-  const location = useLocation();
-  const navigate = useNavigate();
-  const thankYou = location.state?.thankYou;
+  // Handle thank you message and refresh donations
+  useEffect(() => {
+    if (thankYou) {
+      // Show success toast
+      toast.success(
+        `Thank you for your donation of ${formatNaira(thankYou.amount)} to ${thankYou.project}! 🎉`,
+        { duration: 5000 }
+      );
+      
+      // Refresh donations history to update total
+      if (user && isDeviceRecognized) {
+        const cacheKey = `abu_totalDonated_${user.id}`;
+        donationsAPI.getHistory().then(res => {
+          const donations = res.data.donations || [];
+          const sum = donations.reduce((acc, d) => acc + Number(d.amount || 0), 0);
+          setTotalDonated(sum);
+          localStorage.setItem(cacheKey, sum);
+        }).catch(() => {
+          // Silent fail - don't show error
+        });
+      }
+      
+      // Clear location state to prevent showing message again on refresh
+      window.history.replaceState({}, document.title);
+    }
+  }, [thankYou, user, isDeviceRecognized]);
 
   // On mount, try to load projects and totalDonated from localStorage
   useEffect(() => {
@@ -161,22 +188,6 @@ const Home = () => {
         });
     }
   }, [user]);
-
-  // Fetch donors without ranking for Contact tab
-  useEffect(() => {
-    if (activeTab === 'contact') {
-      setDonorsLoading(true);
-      donorsAPI.getWithoutRanking()
-        .then(res => {
-          setDonors(res.data || []);
-          setDonorsLoading(false);
-        })
-        .catch(err => {
-          setDonorsError('Failed to load contacts');
-          setDonorsLoading(false);
-        });
-    }
-  }, [activeTab]);
 
   // Removed redirect logic to allow access to Home page
 
@@ -274,8 +285,8 @@ const Home = () => {
               : 'text-gray-600 hover:text-gray-900'
           }`}
         >
-          <FaAddressBook className="text-base" />
-          Contact
+          <FaHandHoldingHeart className="text-base" />
+          My Donations
         </button>
       </div>
 
@@ -393,53 +404,188 @@ const Home = () => {
           </div>
         )}
 
-        {/* Contact Tab */}
+        {/* My Donations Tab */}
         {activeTab === 'contact' && (
           <div>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">Contact List</h3>
-              <span className="text-sm text-gray-500">{donors.length} contacts</span>
-            </div>
-            
-            {donorsLoading ? (
-              <div className="text-center py-8">
-                <div className="text-gray-500">Loading contacts...</div>
-              </div>
-            ) : donorsError ? (
-              <div className="text-center py-8">
-                <div className="text-red-500">{donorsError}</div>
-              </div>
-            ) : donors.length === 0 ? (
-              <div className="text-center py-8">
-                <div className="text-gray-500">No contacts available</div>
+            {!user || !isDeviceRecognized ? (
+              <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+                <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center">
+                  <FaHandHoldingHeart className="text-3xl text-blue-600" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">No Donation History</h3>
+                <p className="text-gray-600 mb-6">Please login or make a donation to view your donation history</p>
+                <button
+                  onClick={() => navigate('/donations')}
+                  className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-8 py-3 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all transform hover:scale-105 shadow-lg font-semibold"
+                >
+                  Make a Donation
+                </button>
               </div>
             ) : (
-              <div className="space-y-3">
-                {donors.map((donor) => (
-                  <div key={donor.id} className="bg-white rounded-lg shadow p-4 flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
-                        <FaUser className="text-gray-500 text-lg" />
-                      </div>
+              <>
+                {/* Summary Card with enhanced design */}
+                <div className="bg-gradient-to-br from-blue-600 via-blue-700 to-purple-600 rounded-2xl shadow-2xl p-6 mb-6 text-white relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full -mr-16 -mt-16"></div>
+                  <div className="absolute bottom-0 left-0 w-24 h-24 bg-white opacity-10 rounded-full -ml-12 -mb-12"></div>
+                  <div className="relative z-10">
+                    <div className="flex items-center justify-between mb-4">
                       <div>
-                        <div className="font-bold text-gray-900">
-                          {donor.name || 'Unknown Name'}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          {donor.email || 'No email'}
-                        </div>
+                        <h3 className="text-lg font-semibold opacity-90 mb-1">Total Contributions</h3>
+                        <div className="text-4xl font-bold">{formatNaira(totalDonated)}</div>
+                      </div>
+                      <div className="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center backdrop-blur-sm">
+                        <FaHandHoldingHeart className="text-2xl" />
                       </div>
                     </div>
+                    <div className="flex items-center gap-4 mt-4 pt-4 border-t border-white border-opacity-20">
+                      <div className="flex-1">
+                        <div className="text-2xl font-bold">{donationHistory.length}</div>
+                        <div className="text-xs opacity-80">Total Donations</div>
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-2xl font-bold">
+                          {donationHistory.filter(d => d.status === 'success').length}
+                        </div>
+                        <div className="text-xs opacity-80">Successful</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Donation History */}
+                {historyLoading ? (
+                  <div className="text-center py-12">
+                    <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-600"></div>
+                    <p className="mt-4 text-gray-500 font-medium">Loading your donations...</p>
+                  </div>
+                ) : historyError ? (
+                  <div className="bg-red-50 border-2 border-red-200 rounded-xl p-6 text-center">
+                    <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                      <span className="text-red-600 text-xl">⚠️</span>
+                    </div>
+                    <p className="text-red-600 font-semibold mb-2">Error Loading Donations</p>
+                    <p className="text-red-500 text-sm">{historyError}</p>
                     <button
-                      onClick={() => handleInvite(donor)}
-                      className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium flex items-center space-x-2"
+                      onClick={() => setActiveTab('contact')}
+                      className="mt-4 text-blue-600 hover:text-blue-700 font-medium text-sm"
                     >
-                      <FaUserPlus className="text-sm" />
-                      <span>Invite</span>
+                      Try Again
                     </button>
                   </div>
-                ))}
-              </div>
+                ) : donationHistory.length === 0 ? (
+                  <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+                    <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center">
+                      <FaHandHoldingHeart className="text-3xl text-blue-600" />
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">No Donations Yet</h3>
+                    <p className="text-gray-600 mb-6">Start making a difference today!</p>
+                    <button
+                      onClick={() => navigate('/donations')}
+                      className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-8 py-3 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all transform hover:scale-105 shadow-lg font-semibold"
+                    >
+                      Make Your First Donation
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Recent Donations</h4>
+                      <span className="text-xs text-gray-500">{donationHistory.length} items</span>
+                    </div>
+                    {donationHistory.map((donation, index) => {
+                      const date = new Date(donation.created_at || donation.createdAt || donation.date);
+                      const formattedDate = date.toLocaleDateString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric', 
+                        year: 'numeric' 
+                      });
+                      const formattedTime = date.toLocaleTimeString('en-US', { 
+                        hour: '2-digit', 
+                        minute: '2-digit',
+                        hour12: true
+                      });
+                      const projectName = donation.project?.project_title || donation.project_title || 'Endowment Fund';
+                      const isProject = donation.project_id || donation.project?.id;
+                      const isSuccess = donation.status === 'success' || !donation.status;
+                      const statusColor = isSuccess ? 'green' : donation.status === 'pending' ? 'yellow' : 'red';
+                      
+                      return (
+                        <div
+                          key={donation.id || index}
+                          className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 p-5 border-l-4 border-blue-500 transform hover:-translate-y-1"
+                        >
+                          <div className="flex items-start gap-4">
+                            {/* Icon */}
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                              isProject ? 'bg-gradient-to-br from-purple-100 to-purple-200' : 'bg-gradient-to-br from-blue-100 to-blue-200'
+                            }`}>
+                              {isProject ? (
+                                <FaProjectDiagram className="text-xl text-purple-600" />
+                              ) : (
+                                <FaHandHoldingHeart className="text-xl text-blue-600" />
+                              )}
+                            </div>
+                            
+                            {/* Content */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-2 mb-2">
+                                <div className="flex-1">
+                                  <h4 className="font-bold text-gray-900 text-base mb-1 line-clamp-1">
+                                    {projectName}
+                                  </h4>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <div className="flex items-center gap-1 text-xs text-gray-500">
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                      </svg>
+                                      <span>{formattedDate}</span>
+                                    </div>
+                                    <span className="text-gray-300">•</span>
+                                    <div className="flex items-center gap-1 text-xs text-gray-500">
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                      </svg>
+                                      <span>{formattedTime}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                {/* Amount & Status */}
+                                <div className="text-right flex-shrink-0">
+                                  <div className="text-xl font-bold text-blue-600 mb-1">
+                                    {formatNaira(donation.amount)}
+                                  </div>
+                                  <div className={`text-xs px-2.5 py-1 rounded-full font-semibold inline-block ${
+                                    isSuccess
+                                      ? 'bg-green-100 text-green-700' 
+                                      : donation.status === 'pending'
+                                      ? 'bg-yellow-100 text-yellow-700'
+                                      : 'bg-red-100 text-red-700'
+                                  }`}>
+                                    {isSuccess ? '✓ Success' : donation.status?.toUpperCase() || 'SUCCESS'}
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {/* Payment Reference */}
+                              {donation.payment_reference && (
+                                <div className="mt-3 pt-3 border-t border-gray-100">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="text-gray-500 font-medium">Transaction ID:</span>
+                                    <span className="text-gray-700 font-mono bg-gray-50 px-2 py-1 rounded">
+                                      {donation.payment_reference}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

@@ -72,8 +72,18 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Update donor record
+  // NOTE: This function sends donorData AS-IS to the backend
+  // The backend should receive name, surname, and other_name as SEPARATE fields
+  // and save them to their respective database columns
   const updateDonor = async (donorId, donorData) => {
     try {
+      // Log what we're sending to verify structure
+      if (donorData.name || donorData.surname || donorData.other_name) {
+        console.log('AuthContext: Sending separate name fields to backend:');
+        console.log('- name:', donorData.name);
+        console.log('- surname:', donorData.surname);
+        console.log('- other_name:', donorData.other_name);
+      }
       const response = await api.put(`/api/donors/${donorId}`, donorData);
       
       if (response.data.success) {
@@ -113,33 +123,63 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Search addressable alumni
-  const searchAlumni = async (regNumber) => {
-    try {
-      console.log('Making API call to search alumni:', regNumber);
-      const response = await api.get(`/api/donors/search/${regNumber}`);
-      console.log('API response:', response.data);
-      
-      // Check if we have data in the response
-      if (response.data && response.data.data) {
-        return { success: true, donor: response.data.data };
-      } else if (response.data && response.data.success) {
-        return { success: true, donor: response.data.donor };
-      } else {
-        return { success: false, message: response.data.message || 'Alumni not found' };
-      }
-    } catch (error) {
-      console.error('Search alumni error:', error);
-      console.error('Error response:', error.response?.data);
-      
-      if (error.response?.status === 404) {
-        return { success: false, message: 'Alumni record not found' };
-      } else if (error.code === 'ERR_NETWORK') {
-        return { success: false, message: 'Network error - please check your connection' };
-      } else {
+  // Search addressable alumni by reg number, email, or phone
+  const searchAlumni = async (input) => {
+    // Accept either a string (legacy: reg number) or an object with optional fields
+    const criteria = typeof input === 'string'
+      ? { regNumber: input }
+      : (input || {});
+
+    const { regNumber, email, phone } = criteria;
+
+    const trySearch = async (type, value) => {
+      try {
+        let url = '';
+        if (type === 'reg') url = `/api/donors/search/${encodeURIComponent(value)}`;
+        if (type === 'email') url = `/api/donors/search/email/${encodeURIComponent(value)}`;
+        if (type === 'phone') url = `/api/donors/search/phone/${encodeURIComponent(value)}`;
+
+        console.log('Making API call to search alumni:', value);
+        const response = await api.get(url);
+        console.log('API response:', response.data);
+
+        if (response.data && response.data.data) {
+          return { success: true, donor: response.data.data };
+        }
+        if (response.data && response.data.success && response.data.donor) {
+          return { success: true, donor: response.data.donor };
+        }
+        return { success: false, message: response.data?.message || 'Alumni not found' };
+      } catch (error) {
+        console.error('Search alumni error:', error);
+        console.error('Error response:', error.response?.data);
+
+        if (error.response?.status === 404) {
+          return { success: false, message: 'Alumni record not found' };
+        }
+        if (error.code === 'ERR_NETWORK') {
+          return { success: false, message: 'Network error - please check your connection' };
+        }
         return { success: false, message: error.response?.data?.message || 'Search failed' };
       }
+    };
+
+    // Try only provided fields, in this priority: regNumber -> email -> phone
+    const attempts = [];
+    if (regNumber) attempts.push(['reg', regNumber]);
+    if (email) attempts.push(['email', email]);
+    if (phone) attempts.push(['phone', phone]);
+
+    if (attempts.length === 0) {
+      return { success: false, message: 'Provide reg number, email or phone to search' };
     }
+
+    for (const [type, value] of attempts) {
+      const result = await trySearch(type, value);
+      if (result.success) return result;
+    }
+
+    return { success: false, message: 'Alumni record not found' };
   };
 
   // Clear device session (for testing)

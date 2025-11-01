@@ -1,0 +1,68 @@
+═══════════════════════════════════════════════════════════════
+🚨 URGENT: Quick Fix for Donation Endpoint 🚨
+═══════════════════════════════════════════════════════════════
+
+PROBLEM:
+Frontend payment system calls POST /api/donations but backend may not be 
+responding correctly. Users cannot complete donations.
+
+REQUIRED ENDPOINT:
+POST /api/donations
+
+WHAT FRONTEND SENDS:
+{
+  "amount": "100",
+  "email": "user@example.com",
+  "name": "John",
+  "surname": "Doe",
+  "other_name": "Smith",
+  "phone": "+2341234567890",
+  "project_id": 123,  // or null
+  "endowment": "yes",  // or "no"
+  "type": "endowment", // or "project" - REQUIRED!
+  "device_fingerprint": "..."
+}
+
+WHAT BACKEND MUST DO:
+
+1. Find or create donor:
+   - Search by email
+   - If exists: Update name, surname, other_name, phone SEPARATELY
+   - If not: Create with name, surname, other_name SEPARATELY
+
+2. Create donation:
+   Donation::create([
+     'donor_id' => $donor->id,
+     'project_id' => $request->project_id,
+     'amount' => $request->amount,
+     'endowment' => $request->endowment,
+     'type' => $request->type,  // ← CRITICAL! Must be set
+     'status' => 'success',     // Dummy payment = success
+     'payment_reference' => 'FLUTTERWAVE_' . time() . '_' . $donor->id,
+   ]);
+
+3. Return response:
+   {
+     "success": true,
+     "message": "Donation recorded successfully",
+     "data": { donation object }
+   }
+
+CRITICAL POINTS:
+
+✅ Save name, surname, other_name to SEPARATE columns (don't combine!)
+✅ Set type field when creating donation (required by database)
+✅ Return success: true in response
+✅ Create donation record immediately (dummy payment = success)
+
+QUICK TEST:
+curl -X POST http://localhost:8000/api/donations \
+  -H "Content-Type: application/json" \
+  -d '{"amount":"500","email":"test@test.com","name":"Test","surname":"User","phone":"123","endowment":"yes","type":"endowment"}'
+
+Should return: {"success": true, ...}
+
+See BACKEND_DONATION_ENDPOINT_PROMPT.md for full details.
+
+═══════════════════════════════════════════════════════════════
+
