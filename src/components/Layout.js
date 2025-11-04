@@ -1,9 +1,10 @@
 import React from 'react';
 import { Toaster } from 'react-hot-toast';
 import BottomNavigation from './BottomNavigation';
+import PWAInstallButton from './PWAInstallButton';
 import abuLogo from '../assets/abu_logo.png'; // Import the logo
 import { useNavigate, useLocation } from 'react-router-dom';
-import { FaHeart, FaHandHoldingHeart, FaArrowLeft, FaUser } from 'react-icons/fa';
+import { FaHandHoldingHeart, FaArrowLeft, FaUser } from 'react-icons/fa';
 import { useAuth } from '../contexts/AuthContext';
 
 const Layout = ({ children }) => {
@@ -62,6 +63,7 @@ const Layout = ({ children }) => {
           {/* Welcome message and user info */}
           {isAuthenticated && user && (
             <div className="flex items-center gap-3">
+              <PWAInstallButton />
               <div className="text-right">
                 <p className="text-sm font-semibold text-blue-600">Welcome, {user.name}!</p>
                 <p className="text-xs text-gray-500">{user.email}</p>
@@ -77,11 +79,28 @@ const Layout = ({ children }) => {
             </div>
           )}
           
-          {/* Donate button - only show if not authenticated or on donations page */}
-          {(!isAuthenticated || location.pathname !== '/donations') && (
+          {/* For non-authenticated users, show install button and donate button */}
+          {!isAuthenticated && (
+            <div className="flex items-center gap-2">
+              <PWAInstallButton />
+              {location.pathname !== '/donations' && (
+                <button
+                  onClick={() => navigate('/donations')}
+                  className="flex items-center gap-2 px-4 py-2 rounded-full bg-blue-100 text-blue-700 font-semibold shadow-sm hover:bg-blue-200 hover:text-blue-900 transition-all duration-150"
+                  aria-label="Donate"
+                >
+                  <FaHandHoldingHeart className="text-lg" />
+                  <span>Donate</span>
+                </button>
+              )}
+            </div>
+          )}
+          
+          {/* Donate button for authenticated users - only show if not on donations page */}
+          {isAuthenticated && location.pathname !== '/donations' && (
             <button
               onClick={() => navigate('/donations')}
-              className="flex items-center gap-2 px-4 py-2 rounded-full bg-blue-100 text-blue-700 font-semibold shadow-sm hover:bg-blue-200 hover:text-blue-900 transition-all duration-150"
+              className="flex items-center gap-2 px-4 py-2 rounded-full bg-blue-100 text-blue-700 font-semibold shadow-sm hover:bg-blue-200 hover:text-blue-900 transition-all duration-150 ml-2"
               aria-label="Donate"
             >
               <FaHandHoldingHeart className="text-lg" />
