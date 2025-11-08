@@ -6,14 +6,19 @@ import toast from 'react-hot-toast';
 import api, { paymentsAPI, getCsrfCookie, formatNaira } from '../services/api';
 import { getDeviceFingerprint } from '../utils/deviceFingerprint';
 import BackendTest from '../components/BackendTest';
+import SessionCreationModal from '../components/SessionCreationModal';
 import countries from '../utils/countries';
 
 const Donations = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { user, isDeviceRecognized, loading, createDonor, updateDonor, searchAlumni } = useAuth();
+  const { user, isDeviceRecognized, loading, createDonor, updateDonor, searchAlumni, isAuthenticated } = useAuth();
   const projectFromQuery = searchParams.get('project') || '';
   const isEndowment = !projectFromQuery;
+  
+  // Session creation modal state
+  const [showSessionModal, setShowSessionModal] = useState(false);
+  const [pendingDonorId, setPendingDonorId] = useState(null);
   
   const [currentStep, setCurrentStep] = useState('donation'); // donation, registration, alumni-search
   const [donationData, setDonationData] = useState({
@@ -120,13 +125,23 @@ const Donations = () => {
     };
     const result = await createDonor(donorData);
     if (result.success) {
+      const donor = result.donor;
       setDonationData({
         ...donationData,
         name: donorData.name + (donorData.surname ? ' ' + donorData.surname : '') + (donorData.other_name ? ' ' + donorData.other_name : ''),
         email: donorData.email,
         phone: donorData.phone,
       });
-      setCurrentStep('donation');
+      
+      // If user is not authenticated, prompt for session creation
+      if (!isAuthenticated && donor?.id) {
+        setPendingDonorId(donor.id);
+        setShowSessionModal(true);
+      } else {
+        // User is authenticated or no donor ID, proceed to donation
+        setCurrentStep('donation');
+      }
+      
       setRegistrationStep(1);
       setGender('');
       setCountry('Nigeria');
@@ -286,7 +301,17 @@ const Donations = () => {
     const result = await updateDonor(alumniData.id, updateData);
     
     if (result.success) {
-      setCurrentStep('donation');
+      const donor = result.donor || alumniData;
+      
+      // If user is not authenticated, prompt for session creation
+      if (!isAuthenticated && donor?.id) {
+        setPendingDonorId(donor.id);
+        setShowSessionModal(true);
+      } else {
+        // User is authenticated, proceed to donation
+        setCurrentStep('donation');
+        toast.success('Profile updated successfully!');
+      }
     }
   };
 
@@ -708,9 +733,29 @@ const Donations = () => {
     );
   }
 
+  // Handle session creation success
+  const handleSessionCreated = () => {
+    setShowSessionModal(false);
+    setPendingDonorId(null);
+    setCurrentStep('donation');
+    toast.success('Account created! You can now make your donation.');
+  };
+
   // Main Donation Screen
   return (
     <div className="min-h-screen bg-gray-50 py-8">
+      {/* Session Creation Modal */}
+      <SessionCreationModal
+        isOpen={showSessionModal}
+        onClose={() => {
+          setShowSessionModal(false);
+          setPendingDonorId(null);
+          // Still allow them to proceed to donation even if they skip
+          setCurrentStep('donation');
+        }}
+        donorId={pendingDonorId}
+        onSuccess={handleSessionCreated}
+      />
       <div className="max-w-2xl mx-auto px-4">
         <div className="bg-white rounded-xl shadow-lg p-8">
           {/* Welcome Message */}
@@ -755,20 +800,23 @@ const Donations = () => {
             </div>
           )}
 
-          {/* New User Options */}
-          {!user && !isDeviceRecognized && (
+          {/* New User Options - Show if not authenticated */}
+          {!isAuthenticated && (
             <div className="mb-8 p-6 bg-yellow-50 rounded-lg">
               <h3 className="text-lg font-semibold text-yellow-800 mb-2">First time here?</h3>
+              <p className="text-sm text-yellow-700 mb-4">
+                Search for your alumni record or register as a new supporter to get started
+              </p>
               <div className="flex gap-4">
                 <button
                   onClick={() => setCurrentStep('alumni-search')}
-                  className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold"
                 >
                   I'm an ABU Alumni
                 </button>
                 <button
                   onClick={() => setCurrentStep('registration')}
-                  className="flex-1 py-2 px-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  className="flex-1 py-2 px-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold"
                 >
                   New Supporter
                 </button>

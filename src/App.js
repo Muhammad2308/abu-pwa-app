@@ -1,7 +1,8 @@
 import React, { Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Layout from './components/Layout';
+import ProtectedRoute from './components/ProtectedRoute';
 import './index.css';
 
 const Home = lazy(() => import('./pages/Home'));
@@ -22,17 +23,53 @@ function App() {
       <Router>
         <Suspense fallback={<div className="flex justify-center items-center h-screen"><div className="loading-spinner"></div></div>}>
           <Routes>
+            {/* Public routes */}
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/register/addressable_alumni" element={<AddressableAlumni />} />
             <Route path="/register/non_addressable_alumni" element={<NonAddressableAlumni />} />
             <Route path="/register/friends" element={<Friends />} />
-            <Route path="/" element={<Layout><Home /></Layout>} />
-            <Route path="/projects" element={<Layout><Projects /></Layout>} />
-            <Route path="/contacts" element={<Layout><Contacts /></Layout>} />
-            <Route path="/profile" element={<Layout><Profile /></Layout>} />
-            <Route path="/donations" element={<Layout><Donations /></Layout>} />
-
+            
+            {/* Protected routes */}
+            <Route 
+              path="/" 
+              element={
+                <ProtectedRoute>
+                  <Layout><Home /></Layout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/projects" 
+              element={
+                <ProtectedRoute>
+                  <Layout><Projects /></Layout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/contacts" 
+              element={
+                <ProtectedRoute>
+                  <Layout><Contacts /></Layout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/profile" 
+              element={
+                <ProtectedRoute>
+                  <Layout><Profile /></Layout>
+                </ProtectedRoute>
+              } 
+            />
+            {/* Donations page - accessible without auth for new user registration */}
+            <Route 
+              path="/donations" 
+              element={
+                <Layout><Donations /></Layout>
+              } 
+            />
           </Routes>
         </Suspense>
       </Router>

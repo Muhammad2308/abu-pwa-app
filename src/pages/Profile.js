@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import countries from '../utils/countries';
 
 const Profile = () => {
-  const { user, updateUser, logout, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  const { user, updateDonor, logout, isAuthenticated } = useAuth();
   const [editing, setEditing] = useState(false);
   const [profileImage, setProfileImage] = useState(() => localStorage.getItem('profile_image') || '');
   const [imagePreview, setImagePreview] = useState(profileImage);
@@ -36,10 +38,14 @@ const Profile = () => {
     }
   };
 
-  const onSubmit = (data) => {
+  const onSubmit = async (data) => {
     // Save image path/data URL to backend
-    updateUser && updateUser(data);
-    setEditing(false);
+    if (updateDonor && user?.id) {
+      const result = await updateDonor(user.id, data);
+      if (result.success) {
+        setEditing(false);
+      }
+    }
   };
 
   return (
@@ -167,7 +173,10 @@ const Profile = () => {
       </form>
       {isAuthenticated && (
         <button
-          onClick={logout}
+          onClick={async () => {
+            await logout();
+            navigate('/login', { replace: true });
+          }}
           className="mt-6 w-full bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-600"
         >
           Logout

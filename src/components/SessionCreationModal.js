@@ -1,13 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
-import { FaUser, FaLock, FaSpinner } from 'react-icons/fa';
+import { FaUser, FaLock, FaSpinner, FaTimes } from 'react-icons/fa';
 
-const Register = () => {
-  const navigate = useNavigate();
-  const { register, isAuthenticated, loading, user, isDeviceRecognized, hasDonorSession } = useAuth();
-
+const SessionCreationModal = ({ isOpen, onClose, donorId, onSuccess }) => {
+  const { register } = useAuth();
   const [formData, setFormData] = useState({
     username: '',
     password: '',
@@ -16,13 +13,7 @@ const Register = () => {
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Redirect if already authenticated
-  useEffect(() => {
-    if (!loading && isAuthenticated) {
-      navigate('/', { replace: true });
-    }
-  }, [isAuthenticated, loading, navigate]);
-
+  if (!isOpen) return null;
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -60,11 +51,6 @@ const Register = () => {
       newErrors.password_confirmation = 'Passwords do not match';
     }
 
-    // Validate that we have a donor_id from context (device recognized) or show error
-    if (!isDeviceRecognized || !user?.id) {
-      newErrors.submit = 'Please search for your alumni record or register as a new supporter first';
-    }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -76,32 +62,34 @@ const Register = () => {
       return;
     }
 
-    setIsSubmitting(true);
-    setErrors({});
-
-    // Get donor_id from user context (device recognized) or show error
-    if (!isDeviceRecognized || !user?.id) {
-      toast.error('Please search for your alumni record or register as a new supporter first');
-      setErrors({ submit: 'Please search for your alumni record or register as a new supporter first' });
+    if (!donorId) {
+      toast.error('Donor ID is missing. Please try again.');
       return;
     }
+
+    setIsSubmitting(true);
+    setErrors({});
 
     try {
       const result = await register({
         username: formData.username.trim(),
         password: formData.password,
-        donor_id: user.id,
+        donor_id: donorId,
       });
 
       if (result.success) {
-        toast.success(result.message || 'Registration successful!');
-        navigate('/', { replace: true });
+        toast.success('Account created successfully!');
+        setFormData({ username: '', password: '', password_confirmation: '' });
+        if (onSuccess) {
+          onSuccess();
+        }
+        onClose();
       } else {
-        toast.error(result.message || 'Registration failed');
-        setErrors({ submit: result.message || 'Registration failed' });
+        toast.error(result.message || 'Account creation failed');
+        setErrors({ submit: result.message || 'Account creation failed' });
       }
     } catch (error) {
-      console.error('Registration error:', error);
+      console.error('Session creation error:', error);
       toast.error('An unexpected error occurred');
       setErrors({ submit: 'An unexpected error occurred' });
     } finally {
@@ -109,41 +97,31 @@ const Register = () => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center p-4">
-        <div className="text-center">
-          <FaSpinner className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8 relative">
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
+          aria-label="Close"
+        >
+          <FaTimes className="w-5 h-5" />
+        </button>
+
         {/* Header */}
-        <div className="text-center mb-8">
-          <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-green-600 to-blue-600 rounded-full flex items-center justify-center">
-            <FaUser className="text-3xl text-white" />
+        <div className="text-center mb-6">
+          <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-blue-600 to-purple-600 rounded-full flex items-center justify-center">
+            <FaUser className="text-2xl text-white" />
           </div>
-          {isDeviceRecognized && user && !hasDonorSession ? (
-            <>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome, {user.name || user.surname || 'User'}!</h1>
-              <p className="text-gray-600 mb-2">Create your account to access your donation history</p>
-              <p className="text-sm text-blue-600 font-medium">Already have an account? <Link to="/login" className="underline">Sign in here</Link></p>
-            </>
-          ) : (
-            <>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Create Account</h1>
-              <p className="text-gray-600">Register to access your donor account</p>
-            </>
-          )}
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Create Your Account</h2>
+          <p className="text-gray-600 text-sm">
+            Create a username and password to access your donation history and manage your account
+          </p>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-4">
           {/* Username Field */}
           <div>
             <label htmlFor="username" className="block text-sm font-semibold text-gray-700 mb-2">
@@ -170,7 +148,6 @@ const Register = () => {
               <p className="mt-1 text-sm text-red-600">{errors.username}</p>
             )}
           </div>
-
 
           {/* Password Field */}
           <div>
@@ -237,12 +214,12 @@ const Register = () => {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full bg-gradient-to-r from-green-600 to-blue-600 text-white py-3 rounded-xl font-semibold hover:from-green-700 hover:to-blue-700 transition-all transform hover:scale-105 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-2"
+            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 transition-all transform hover:scale-105 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-2"
           >
             {isSubmitting ? (
               <>
                 <FaSpinner className="animate-spin" />
-                <span>Registering...</span>
+                <span>Creating Account...</span>
               </>
             ) : (
               'Create Account'
@@ -250,21 +227,14 @@ const Register = () => {
           </button>
         </form>
 
-        {/* Login Link */}
-        <div className="mt-6 text-center">
-          <p className="text-gray-600">
-            Already have an account?{' '}
-            <Link
-              to="/login"
-              className="text-blue-600 font-semibold hover:text-blue-700 hover:underline"
-            >
-              Sign in here
-            </Link>
-          </p>
-        </div>
+        {/* Info Text */}
+        <p className="mt-4 text-xs text-center text-gray-500">
+          You'll use this username and password to log in next time
+        </p>
       </div>
     </div>
   );
 };
 
-export default Register;
+export default SessionCreationModal;
+

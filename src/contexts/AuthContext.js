@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import api from '../services/api';
+import { donorSessionsAPI } from '../services/api';
 import toast from 'react-hot-toast';
 import { getDeviceFingerprint } from '../utils/deviceFingerprint';
 
@@ -17,12 +18,98 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isDeviceRecognized, setIsDeviceRecognized] = useState(false);
+  
+  // Donor session authentication state
+  const [sessionId, setSessionId] = useState(null);
+  const [username, setUsername] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [deviceSessionId, setDeviceSessionId] = useState(null);
+  const [hasDonorSession, setHasDonorSession] = useState(false);
 
-  // Check device recognition on app load
+  // Check session on app load (priority: donor session > device recognition)
   useEffect(() => {
-    checkDeviceRecognition();
+    checkSession();
   }, []);
 
+  // Check donor session from localStorage and verify with backend
+  const checkSession = async () => {
+    try {
+      const storedSessionId = localStorage.getItem('donor_session_id');
+      const storedUsername = localStorage.getItem('donor_username');
+
+      if (storedSessionId) {
+        // Verify session with backend
+        const response = await donorSessionsAPI.getCurrentSession(parseInt(storedSessionId));
+        
+        if (response.data?.success && response.data?.data) {
+          const sessionData = response.data.data;
+          setSessionId(storedSessionId);
+          setUsername(sessionData.username || storedUsername);
+          setUser(sessionData.donor);
+          setIsAuthenticated(true);
+          setIsDeviceRecognized(true);
+          setHasDonorSession(true);
+          if (sessionData.device_session_id) {
+            setDeviceSessionId(sessionData.device_session_id);
+          }
+        } else {
+          // Session invalid, clear storage
+          clearDonorSession();
+          // Check device recognition after clearing session
+          await checkDeviceAndDonorSession();
+        }
+      } else {
+        // No session, check device recognition and donor session status
+        await checkDeviceAndDonorSession();
+      }
+    } catch (error) {
+      console.error('Session check error:', error);
+      // Session invalid or expired, clear storage and check device
+      clearDonorSession();
+      await checkDeviceAndDonorSession();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Check device recognition and donor session status
+  const checkDeviceAndDonorSession = async () => {
+    try {
+      // Use the new check-device endpoint that returns both device and donor session status
+      const response = await donorSessionsAPI.checkDevice();
+      
+      if (response.data?.success && response.data?.recognized) {
+        // Device is recognized
+        setIsDeviceRecognized(true);
+        setUser(response.data.donor);
+        
+        if (response.data.device_session?.id) {
+          setDeviceSessionId(response.data.device_session.id);
+        }
+        
+        // Check if donor has a session
+        if (response.data.has_donor_session && response.data.donor_session) {
+          // Donor has a session - they should login
+          setHasDonorSession(true);
+        } else {
+          // Device recognized but no donor session - they should register
+          setHasDonorSession(false);
+        }
+      } else {
+        // Device not recognized
+        setUser(null);
+        setIsDeviceRecognized(false);
+        setHasDonorSession(false);
+        setDeviceSessionId(null);
+      }
+    } catch (error) {
+      console.error('Device and session check error:', error);
+      // Fallback to old device check endpoint
+      await checkDeviceRecognition();
+    }
+  };
+
+  // Check device recognition (fallback - old endpoint)
   const checkDeviceRecognition = async () => {
     try {
       const response = await api.get('/api/device/check');
@@ -30,17 +117,162 @@ export const AuthProvider = ({ children }) => {
       if (response.data.recognized) {
         setUser(response.data.donor);
         setIsDeviceRecognized(true);
+        // We don't know if they have a donor session, so check it
+        // This is a fallback, so we'll assume they need to register/login
+        setHasDonorSession(false);
       } else {
         setUser(null);
         setIsDeviceRecognized(false);
+        setHasDonorSession(false);
       }
     } catch (error) {
       console.error('Device recognition error:', error);
       setUser(null);
       setIsDeviceRecognized(false);
-    } finally {
-      setLoading(false);
+      setHasDonorSession(false);
     }
+  };
+
+  // Register new donor session
+  const register = async (registerData) => {
+    try {
+      // Include device_session_id if available
+      const dataToSend = {
+        ...registerData,
+        device_session_id: deviceSessionId || registerData.device_session_id || null,
+      };
+      
+      const response = await donorSessionsAPI.register(dataToSend);
+      
+      if (response.data?.success && response.data?.data) {
+        const { id: newSessionId, username: newUsername, donor, device_session_id } = response.data.data;
+        
+        // Store session in localStorage
+        localStorage.setItem('donor_session_id', newSessionId.toString());
+        localStorage.setItem('donor_username', newUsername);
+        
+        // Update state
+        setSessionId(newSessionId.toString());
+        setUsername(newUsername);
+        setUser(donor);
+        setIsAuthenticated(true);
+        setIsDeviceRecognized(true);
+        setHasDonorSession(true);
+        if (device_session_id) {
+          setDeviceSessionId(device_session_id);
+        }
+        
+        return { success: true, message: response.data.message || 'Registration successful' };
+      } else {
+        return { success: false, message: response.data?.message || 'Registration failed' };
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
+      
+      // Handle specific error codes
+      if (error.response?.status === 422) {
+        const validationErrors = error.response.data?.errors;
+        if (validationErrors) {
+          const errorMessages = Object.values(validationErrors).flat().join(', ');
+          return { success: false, message: errorMessages };
+        }
+        return { success: false, message: error.response.data?.message || 'Validation failed' };
+      }
+      
+      if (error.response?.status === 409) {
+        return { success: false, message: error.response.data?.message || 'Donor already registered' };
+      }
+      
+      if (error.code === 'ERR_NETWORK') {
+        return { success: false, message: 'Network error - please check your connection' };
+      }
+      
+      return { success: false, message: error.response?.data?.message || 'Registration failed' };
+    }
+  };
+
+  // Login with username and password
+  const login = async (credentials) => {
+    try {
+      // Include device_session_id if available
+      const dataToSend = {
+        ...credentials,
+        device_session_id: deviceSessionId || credentials.device_session_id || null,
+      };
+      
+      const response = await donorSessionsAPI.login(dataToSend);
+      
+      if (response.data?.success && response.data?.data) {
+        const { session_id: newSessionId, username: newUsername, donor, device_session_id } = response.data.data;
+        
+        // Store session in localStorage
+        localStorage.setItem('donor_session_id', newSessionId.toString());
+        localStorage.setItem('donor_username', newUsername);
+        
+        // Update state
+        setSessionId(newSessionId.toString());
+        setUsername(newUsername);
+        setUser(donor);
+        setIsAuthenticated(true);
+        setIsDeviceRecognized(true);
+        setHasDonorSession(true);
+        if (device_session_id) {
+          setDeviceSessionId(device_session_id);
+        }
+        
+        return { success: true, message: response.data.message || 'Login successful' };
+      } else {
+        return { success: false, message: response.data?.message || 'Login failed' };
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      
+      // Handle specific error codes
+      if (error.response?.status === 422) {
+        const validationErrors = error.response.data?.errors;
+        if (validationErrors) {
+          const errorMessages = Object.values(validationErrors).flat().join(', ');
+          return { success: false, message: errorMessages };
+        }
+        return { success: false, message: error.response.data?.message || 'Validation failed' };
+      }
+      
+      if (error.response?.status === 401) {
+        return { success: false, message: error.response.data?.message || 'Invalid credentials' };
+      }
+      
+      if (error.code === 'ERR_NETWORK') {
+        return { success: false, message: 'Network error - please check your connection' };
+      }
+      
+      return { success: false, message: error.response?.data?.message || 'Login failed' };
+    }
+  };
+
+  // Logout from donor session
+  const logout = async () => {
+    try {
+      // Call logout API if session exists
+      if (sessionId) {
+        await donorSessionsAPI.logout();
+      }
+    } catch (error) {
+      console.error('Logout API error:', error);
+      // Continue with logout even if API call fails
+    } finally {
+      // Clear session regardless of API response
+      clearDonorSession();
+    }
+  };
+
+  // Clear donor session from state and localStorage
+  const clearDonorSession = () => {
+    localStorage.removeItem('donor_session_id');
+    localStorage.removeItem('donor_username');
+    setSessionId(null);
+    setUsername(null);
+    setIsAuthenticated(false);
+    // Don't clear user/device recognition here - let it fall back to device recognition
   };
 
   // Create donor record
@@ -190,14 +422,28 @@ export const AuthProvider = ({ children }) => {
   };
 
   const value = {
+    // State
     user,
     isDeviceRecognized,
     loading,
+    // Donor session authentication
+    sessionId,
+    username,
+    isAuthenticated,
+    deviceSessionId,
+    hasDonorSession, // Whether the current donor has a donor_session record
+    // Methods
     createDonor,
     updateDonor,
     searchAlumni,
     checkDeviceRecognition,
-    clearSession
+    clearSession,
+    // Donor session methods
+    register,
+    login,
+    logout,
+    checkSession,
+    checkDeviceAndDonorSession,
   };
 
   return (

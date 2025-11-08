@@ -20,9 +20,16 @@ export const getCsrfCookie = () => api.get('/sanctum/csrf-cookie');
 // Request interceptor to add auth token
 api.interceptors.request.use(
   (config) => {
+    // Priority: session_id > auth_token > device_session
+    const sessionId = localStorage.getItem('donor_session_id');
     const token = localStorage.getItem('auth_token');
     const deviceSession = localStorage.getItem('device_session');
-    if (token) {
+    
+    if (sessionId) {
+      // Donor session authentication - session_id is sent in request body for /me endpoint
+      // For other endpoints, we might need to add it as a header if backend requires it
+      // For now, /me endpoint expects it in body, other endpoints may use it differently
+    } else if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     } else if (deviceSession) {
       config.headers['X-Device-Session'] = deviceSession;
@@ -39,10 +46,16 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      // Clear all auth-related storage
       localStorage.removeItem('auth_token');
       localStorage.removeItem('device_session');
+      localStorage.removeItem('donor_session_id');
+      localStorage.removeItem('donor_username');
       localStorage.removeItem('user');
-      window.location.href = '/login';
+      // Only redirect if not already on login/register page
+      if (!window.location.pathname.includes('/login') && !window.location.pathname.includes('/register')) {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
@@ -128,6 +141,15 @@ export const donorsAPI = {
   update: (id, donorData) => api.put(`/api/donors/${id}`, donorData),
   create: (donorData) => api.post('/api/donors', donorData),
   getWithoutRanking: () => api.get('/api/donors/without-ranking'),
+};
+
+// Donor Sessions API calls (Authentication)
+export const donorSessionsAPI = {
+  register: (data) => api.post('/api/donor-sessions/register', data),
+  login: (credentials) => api.post('/api/donor-sessions/login', credentials),
+  logout: () => api.post('/api/donor-sessions/logout'),
+  getCurrentSession: (sessionId) => api.post('/api/donor-sessions/me', { session_id: sessionId }),
+  checkDevice: () => api.get('/api/donor-sessions/check-device'),
 };
 
 // Utility functions

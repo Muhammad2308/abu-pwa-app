@@ -26,7 +26,7 @@ const Layout = ({ children }) => {
 
   const handleLogout = async () => {
     await logout();
-    navigate('/');
+    navigate('/login', { replace: true });
   };
 
   return (

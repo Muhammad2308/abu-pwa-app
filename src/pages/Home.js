@@ -31,8 +31,8 @@ const Home = () => {
   const [messages, setMessages] = useState([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [messagesError, setMessagesError] = useState(null);
-  // Tab state
-  const [activeTab, setActiveTab] = useState('projects');
+  // Tab state - default to My Donations tab
+  const [activeTab, setActiveTab] = useState('contact');
   // Donation history state for Contact tab (changed from donors)
   const [donationHistory, setDonationHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -256,6 +256,17 @@ const Home = () => {
       {/* Tab Navigation */}
       <div className="flex bg-gray-100 rounded-lg p-1 mb-6">
         <button
+          onClick={() => setActiveTab('contact')}
+          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+            activeTab === 'contact'
+              ? 'bg-white text-primary-600 shadow-sm'
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <FaHandHoldingHeart className="text-base" />
+          My Donations
+        </button>
+        <button
           onClick={() => setActiveTab('projects')}
           className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
             activeTab === 'projects'
@@ -276,17 +287,6 @@ const Home = () => {
         >
           <FaDonate className="text-base" />
           Donate
-        </button>
-        <button
-          onClick={() => setActiveTab('contact')}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
-            activeTab === 'contact'
-              ? 'bg-white text-primary-600 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          <FaHandHoldingHeart className="text-base" />
-          My Donations
         </button>
       </div>
 
