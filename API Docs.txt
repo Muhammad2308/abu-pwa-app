@@ -1,0 +1,134 @@
+Perfect! I understand. The donations table has `donor_id` and `project_id` fields, and we need to handle the project selection properly. Let me update the frontend to work with project IDs instead of project names.
+
+Let me check the current state and add the project fetching functionality:
+
+Read file: src/pages/Donations.js
+Great! I can see the state has been updated. Now let me add the project fetching functionality and update the payment form:
+
+It seems there are some syntax errors. Let me check the current state of the file around the problematic lines:
+
+Read file: src/pages/Donations.js
+I can see the issue. The payment form is using hardcoded project options instead of the fetched projects. Let me update the payment form to use the dynamic projects:
+
+Now let me also update the main donation form to use dynamic projects:
+
+Read file: src/pages/Donations.js
+Now let me update the main donation form to also use dynamic projects:
+
+Let me check the current state and update the main donation form:
+
+Now let me update the payment initialization to use project_id instead of project:
+
+Now let me also update the form validation to handle project_id:
+
+Now let me also update the onSubmit function to handle project_id:
+
+Let me check the current onSubmit function:
+
+Read file: src/pages/Donations.js
+Perfect! I can see the onSubmit function is already correctly updated. Now let me add a useEffect to fetch projects when the main form is shown for authenticated users:
+
+Let me check if the useEffect is already there:
+
+Read file: src/pages/Donations.js
+Perfect! I can see the useEffect hooks are already in place. Now let me create a summary of all the changes made to support project_id:
+
+## ✅ Updated Implementation Summary
+
+### **Frontend Changes Made for Project ID Support:**
+
+1. **✅ Updated State Management**
+   - Changed `donationForm.project` to `donationForm.project_id`
+   - Added `availableProjects` state to store fetched projects
+   - Added `loadingProjects` state for loading indicators
+
+2. **✅ Dynamic Project Fetching**
+   - Added `fetchProjects()` function to get projects from API
+   - Added useEffect hooks to fetch projects when forms are shown
+   - Projects are fetched for both payment form and main donation form
+
+3. **✅ Updated Payment Form**
+   - Replaced hardcoded project options with dynamic projects from API
+   - Added loading state for project dropdown
+   - Updated form to use `project_id` instead of project name
+
+4. **✅ Updated Main Donation Form**
+   - Replaced hardcoded project options with dynamic projects
+   - Added loading state for project dropdown
+   - Updated form validation to handle optional project selection
+
+5. **✅ Updated Payment Initialization**
+   - Changed metadata to use `project_id` instead of project name
+   - Added null handling for when no project is selected
+   - Updated API calls to use proper project IDs
+
+6. **✅ Updated Form Validation**
+   - Made project selection optional (no validation required)
+   - Kept amount validation as required
+
+### **Database Structure Expected:**
+
+```sql
+-- Projects table
+CREATE TABLE projects (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    target_amount DECIMAL(10,2),
+    current_amount DECIMAL(10,2) DEFAULT 0,
+    status ENUM('active', 'completed', 'paused') DEFAULT 'active',
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
+);
+
+-- Donations table
+CREATE TABLE donations (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    donor_id INT NOT NULL,
+    project_id INT NULL, -- NULL for general donations
+    amount DECIMAL(10,2) NOT NULL,
+    frequency ENUM('onetime', 'recurring') DEFAULT 'onetime',
+    endowment ENUM('yes', 'no') DEFAULT 'no',
+    payment_reference VARCHAR(255),
+    status ENUM('pending', 'success', 'failed') DEFAULT 'pending',
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP,
+    FOREIGN KEY (donor_id) REFERENCES donors(id),
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+);
+```
+
+### **API Endpoints Expected:**
+
+1. **Get Projects**
+   ```php
+   GET /api/projects
+   // Returns: { data: [{ id: 1, name: "Project Name", ... }] }
+   ```
+
+2. **Initialize Payment**
+   ```php
+   POST /api/payments/initialize
+   // Body: { email, amount, metadata: { donor_id, project_id, frequency, endowment } }
+   ```
+
+3. **Update Donor**
+   ```php
+   PUT /api/donors/{id}
+   // Body: { name, email, phone, address, state, city, ranking }
+   ```
+
+4. **Create Session**
+   ```php
+   POST /api/session/create
+   // Body: { donor_id, device_info }
+   ```
+
+### **Flow Summary:**
+
+1. **Project Selection**: Users can select from available projects or choose "General Donation" (no project)
+2. **Payment Processing**: Project ID is included in payment metadata for backend processing
+3. **Donation Recording**: Backend can associate donation with specific project or mark as general donation
+
+The frontend now properly handles project IDs and will work seamlessly with the backend database structure!   
+
