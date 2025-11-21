@@ -12,6 +12,14 @@ const Register = () => {
   const { register, googleRegister, isAuthenticated, loading } = useAuth();
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
+  // Redirect if already authenticated (similar to Login.js)
+  useEffect(() => {
+    if (!loading && isAuthenticated) {
+      console.log('Register: User is authenticated, redirecting to home...');
+      navigate('/', { replace: true });
+    }
+  }, [isAuthenticated, loading, navigate]);
+
   const [step, setStep] = useState('register'); // 'search', 'found', 'register' - default to 'register' for simplified flow
   const [searchData, setSearchData] = useState({
     searchType: 'email', // 'email', 'phone', 'regNumber'
@@ -488,16 +496,91 @@ const Register = () => {
   const handleGoogleRegister = async (idToken) => {
     setIsGoogleLoading(true);
     try {
+      console.log('Starting Google registration...');
       const result = await googleRegister(idToken);
+      console.log('Google registration result:', result);
+      
       if (result.success) {
         toast.success(result.message || 'Google registration successful!');
-        navigate('/', { replace: true });
+        console.log('Registration successful, navigating to home...');
+        
+        // Wait a bit longer to ensure state is fully updated, then navigate
+        setTimeout(() => {
+          console.log('Navigating to home page...');
+          // Try React Router navigation first
+          navigate('/', { replace: true });
+          // Fallback: Force navigation if React Router doesn't work
+          setTimeout(() => {
+            if (window.location.pathname !== '/') {
+              console.log('React Router navigation failed, using window.location...');
+              window.location.href = '/';
+            }
+          }, 200);
+        }, 500);
       } else {
-        toast.error(result.message || 'Google registration failed');
+        // Show detailed error message
+        const errorMsg = result.message || 'Google registration failed';
+        
+        // Show more helpful error messages
+        if (errorMsg.includes('email') && errorMsg.includes('verified')) {
+          toast.error('Please verify your Google email first, then try again.', { 
+            duration: 8000,
+            icon: '📧',
+          });
+        } else if (errorMsg.includes('expired')) {
+          toast.error('Google sign-in expired. Please try again.', { 
+            duration: 6000,
+            icon: '⏰',
+          });
+        } else if (errorMsg.includes('Invalid') || errorMsg.includes('token')) {
+          toast.error('Google sign-in failed. Please try signing in with Google again.', { 
+            duration: 6000,
+            icon: '🔐',
+          });
+        } else {
+          toast.error(errorMsg, { duration: 6000 });
+        }
+        
+        console.error('Registration failed:', errorMsg, result.error);
+        
+        // If it's a 409 (account exists), offer to redirect to login
+        if (result.error?.response?.status === 409) {
+          setTimeout(() => {
+            if (window.confirm('This account already exists. Would you like to login instead?')) {
+              navigate('/login', { replace: true });
+            }
+          }, 2000);
+        }
+        
+        // If it's a 401, suggest trying again
+        if (result.error?.response?.status === 401) {
+          console.log('401 error - Token verification failed. This could be a backend issue.');
+          console.log('Suggestions:');
+          console.log('1. Check backend GoogleAuthService is correctly verifying tokens');
+          console.log('2. Verify GOOGLE_CLIENT_ID matches in backend .env');
+          console.log('3. Check backend logs for detailed error');
+        }
+        
+        // If it's a 500 error with backend implementation issue, show helpful message
+        if (result.error?.response?.status === 500) {
+          const backendError = result.error?.response?.data?.message || result.error?.response?.data?.exception || '';
+          if (backendError.includes('Google_Client') || backendError.includes('not found')) {
+            console.error('Backend Google OAuth not configured. Please check backend implementation.');
+            const detailedMsg = 'Backend Google OAuth is not configured. The server needs to install the Google API client library. Error: ' + backendError;
+            toast.error(detailedMsg, { duration: 10000 });
+            console.error('Full backend error:', result.error?.response?.data);
+          } else {
+            // Show the actual backend error message
+            const errorDetails = result.error?.response?.data?.message || result.error?.response?.data?.exception || 'Unknown server error';
+            console.error('Backend 500 error:', errorDetails);
+            toast.error(`Server error: ${errorDetails}`, { duration: 8000 });
+          }
+        }
       }
     } catch (error) {
       console.error('Google register error:', error);
-      toast.error('Google registration failed. Please try again.');
+      const errorMsg = error.response?.data?.message || error.message || 'Google registration failed. Please try again.';
+      toast.error(errorMsg, { duration: 6000 });
     } finally {
       setIsGoogleLoading(false);
     }

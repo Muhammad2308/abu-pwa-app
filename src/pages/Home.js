@@ -83,17 +83,20 @@ const Home = () => {
     // First priority: icon_image (check if it exists and is not empty)
     const iconImage = project.icon_image || project.icon_image_path;
     if (iconImage && iconImage.trim() !== '') {
-      const iconPath = iconImage;
+      const iconPath = iconImage.trim();
       // If it's already a full URL, return as is
       if (iconPath.startsWith('http://') || iconPath.startsWith('https://')) {
         return iconPath;
       }
-      // If it already starts with storage/, don't add it again
-      if (iconPath.startsWith('storage/') || iconPath.startsWith('/storage/')) {
-        return baseUrl + (iconPath.startsWith('/') ? iconPath.slice(1) : iconPath);
+      // Normalize path - remove leading slash if present
+      const normalizedPath = iconPath.startsWith('/') ? iconPath.slice(1) : iconPath;
+      
+      // Check if path already includes 'storage'
+      if (normalizedPath.startsWith('storage/')) {
+        return baseUrl + normalizedPath;
       }
       // Otherwise, add storage/ prefix
-      return baseUrl + 'storage/' + iconPath;
+      return baseUrl + 'storage/' + normalizedPath;
     }
     
     // Second priority: first body_image from project_photos table
@@ -101,23 +104,26 @@ const Home = () => {
       for (const photo of project.photos) {
         const bodyImage = photo.body_image || photo.body_image_path;
         if (bodyImage && bodyImage.trim() !== '') {
-          const bodyPath = bodyImage;
+          const bodyPath = bodyImage.trim();
           // If it's already a full URL, return as is
           if (bodyPath.startsWith('http://') || bodyPath.startsWith('https://')) {
             return bodyPath;
           }
-          // If it already starts with storage/, don't add it again
-          if (bodyPath.startsWith('storage/') || bodyPath.startsWith('/storage/')) {
-            return baseUrl + (bodyPath.startsWith('/') ? bodyPath.slice(1) : bodyPath);
+          // Normalize path - remove leading slash if present
+          const normalizedPath = bodyPath.startsWith('/') ? bodyPath.slice(1) : bodyPath;
+          
+          // Check if path already includes 'storage'
+          if (normalizedPath.startsWith('storage/')) {
+            return baseUrl + normalizedPath;
           }
           // Otherwise, add storage/ prefix
-          return baseUrl + 'storage/' + bodyPath;
+          return baseUrl + 'storage/' + normalizedPath;
         }
       }
     }
     
-    // Fallback: placeholder
-    return 'https://via.placeholder.com/400x200?text=No+Image';
+    // Fallback: Use a data URI for a simple gray placeholder (no external dependency)
+    return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
   };
 
   // Handle thank you message and refresh donations
@@ -418,13 +424,20 @@ const Home = () => {
                         alt={project.project_title}
                         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                         onError={(e) => {
-                          console.error('Image load error for project:', project.project_title, 'URL:', e.target.src);
-                          console.error('Project data:', { 
-                            icon_image: project.icon_image, 
-                            photos: project.photos,
-                            baseUrl: getBaseUrl()
-                          });
-                          e.target.src = 'https://via.placeholder.com/400x200?text=No+Image';
+                          // Only log error once per project to avoid spam
+                          if (!e.target.dataset.errorLogged) {
+                            console.warn('Image load error for project:', project.project_title, 'URL:', e.target.src);
+                            console.warn('Project data:', { 
+                              icon_image: project.icon_image, 
+                              photos: project.photos,
+                              baseUrl: getBaseUrl()
+                            });
+                            e.target.dataset.errorLogged = 'true';
+                          }
+                          // Use data URI fallback instead of external placeholder
+                          if (!e.target.src.includes('data:image')) {
+                            e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
+                          }
                         }}
                       />
                       {/* Gradient Overlay */}

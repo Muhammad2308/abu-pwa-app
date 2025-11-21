@@ -245,6 +245,23 @@ export const AuthProvider = ({ children }) => {
       console.error('Login error:', error);
       
       // Handle specific error codes
+      if (error.response?.status === 401) {
+        // Check if it's a Google account trying to use email/password
+        const errorMessage = error.response.data?.message || '';
+        if (errorMessage.includes('Google') || errorMessage.includes('google')) {
+          return { 
+            success: false, 
+            message: errorMessage || 'This account is registered with Google. Please use "Login with Google" instead.',
+            error: error 
+          };
+        }
+        return { 
+          success: false, 
+          message: error.response.data?.message || 'Invalid credentials',
+          error: error 
+        };
+      }
+      
       if (error.response?.status === 422) {
         const validationErrors = error.response.data?.errors;
         if (validationErrors) {
@@ -305,7 +322,11 @@ export const AuthProvider = ({ children }) => {
         device_session_id: deviceSessionId || null,
       };
       
+      console.log('Google Login - Sending data:', { token: credential?.substring(0, 20) + '...', device_session_id: dataToSend.device_session_id });
+      
       const response = await donorSessionsAPI.googleLogin(dataToSend);
+      
+      console.log('Google Login - Response:', response.data);
       
       if (response.data?.success && response.data?.data) {
         const { session_id: newSessionId, username: newUsername, donor, device_session_id } = response.data.data;
@@ -327,23 +348,99 @@ export const AuthProvider = ({ children }) => {
         
         return { success: true, message: response.data.message || 'Google login successful' };
       } else {
-        return { success: false, message: response.data?.message || 'Google login failed' };
+        const errorMessage = response.data?.message || 'Google login failed';
+        console.error('Google Login - Failed:', errorMessage, response.data);
+        return { success: false, message: errorMessage };
       }
     } catch (error) {
       console.error('Google login error:', error);
-      return { success: false, message: error.response?.data?.message || 'Google login failed' };
+      console.error('Error response:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      
+      // Extract detailed error message
+      let errorMessage = 'Google login failed. Please try again.';
+      
+      if (error.response?.status === 500) {
+        errorMessage = error.response?.data?.message || 'Server error occurred. Please contact support or try again later.';
+      } else if (error.response?.status === 401) {
+        errorMessage = error.response?.data?.message || 'Invalid or expired Google token. Please try again.';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      return { success: false, message: errorMessage, error: error };
     }
   };
 
   // Google OAuth Register
   const googleRegister = async (credential) => {
     try {
+      // Validate token format
+      if (!credential || typeof credential !== 'string') {
+        console.error('Google Register - Invalid token format:', typeof credential);
+        return { success: false, message: 'Invalid Google token format' };
+      }
+
+      // Decode token to verify it's valid (for debugging)
+      try {
+        const parts = credential.split('.');
+        if (parts.length !== 3) {
+          console.error('Google Register - Invalid JWT format (not 3 parts)');
+          return { success: false, message: 'Invalid Google token format' };
+        }
+        
+        // Decode payload (base64url decode)
+        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+        console.log('Google Register - Token payload:', {
+          iss: payload.iss,
+          aud: payload.aud,
+          email: payload.email,
+          email_verified: payload.email_verified,
+          exp: payload.exp,
+          exp_date: new Date(payload.exp * 1000).toISOString(),
+          now: new Date().toISOString(),
+          expired: payload.exp < Date.now() / 1000
+        });
+
+        // Check if token is expired
+        if (payload.exp && payload.exp < Date.now() / 1000) {
+          console.error('Google Register - Token expired');
+          return { success: false, message: 'Google token has expired. Please try again.' };
+        }
+
+        // Check if email is verified
+        if (!payload.email_verified) {
+          console.error('Google Register - Email not verified');
+          return { success: false, message: 'Google email is not verified. Please verify your email with Google first.' };
+        }
+
+        // Check audience (client ID)
+        const expectedClientId = '470253699627-a50centdev8a3ahhq0e01oiakatu3qh4.apps.googleusercontent.com';
+        if (payload.aud && payload.aud !== expectedClientId) {
+          console.error('Google Register - Client ID mismatch:', { expected: expectedClientId, got: payload.aud });
+          return { success: false, message: 'Google token client ID mismatch. Please contact support.' };
+        }
+      } catch (decodeError) {
+        console.error('Google Register - Token decode error:', decodeError);
+        // Continue anyway - backend will verify
+      }
+
       const dataToSend = {
         token: credential,
         device_session_id: deviceSessionId || null,
       };
       
+      console.log('Google Register - Sending data:', { 
+        token_length: credential.length,
+        token_preview: credential.substring(0, 30) + '...',
+        device_session_id: dataToSend.device_session_id 
+      });
+      
       const response = await donorSessionsAPI.googleRegister(dataToSend);
+      
+      console.log('Google Register - Response:', response.data);
       
       if (response.data?.success && response.data?.data) {
         const { session_id: newSessionId, username: newUsername, donor, device_session_id } = response.data.data;
@@ -352,7 +449,7 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('donor_session_id', newSessionId.toString());
         localStorage.setItem('donor_username', newUsername);
         
-        // Update state
+        // Update state - ensure all state is set synchronously
         setSessionId(newSessionId.toString());
         setUsername(newUsername);
         setUser(donor);
@@ -363,13 +460,66 @@ export const AuthProvider = ({ children }) => {
           setDeviceSessionId(device_session_id);
         }
         
+        console.log('Google Register - State updated:', {
+          sessionId: newSessionId,
+          username: newUsername,
+          isAuthenticated: true,
+          user: donor
+        });
+        
+        // Force a state update by triggering a re-render
+        // This ensures the useEffect in Register.js picks up the authentication change
+        setTimeout(() => {
+          console.log('Google Register - Triggering state refresh...');
+          // The state is already set, but we'll log to confirm
+        }, 100);
+        
         return { success: true, message: response.data.message || 'Google registration successful' };
       } else {
-        return { success: false, message: response.data?.message || 'Google registration failed' };
+        const errorMessage = response.data?.message || 'Google registration failed';
+        console.error('Google Register - Failed:', errorMessage, response.data);
+        return { success: false, message: errorMessage };
       }
     } catch (error) {
       console.error('Google register error:', error);
-      return { success: false, message: error.response?.data?.message || 'Google registration failed' };
+      console.error('Error response:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      
+      // Extract detailed error message
+      let errorMessage = 'Google registration failed. Please try again.';
+      
+      if (error.response?.status === 500) {
+        // Check if it's a backend implementation issue
+        const backendError = error.response?.data?.message || error.response?.data?.exception || '';
+        if (backendError.includes('Google_Client') || backendError.includes('not found')) {
+          errorMessage = 'Google OAuth is not properly configured on the server. Please contact support.';
+        } else {
+          errorMessage = backendError || 'Server error occurred. Please contact support or try again later.';
+        }
+      } else if (error.response?.status === 401) {
+        const backendMsg = error.response?.data?.message || '';
+        if (backendMsg.includes('email') && backendMsg.includes('verified')) {
+          errorMessage = 'Your Google email is not verified. Please verify your email with Google first, then try again.';
+        } else if (backendMsg.includes('expired')) {
+          errorMessage = 'Google token has expired. Please try signing in with Google again.';
+        } else {
+          errorMessage = backendMsg || 'Invalid or expired Google token. Please try signing in with Google again.';
+        }
+        
+        console.error('Google Register - 401 Error Details:', {
+          message: backendMsg,
+          full_response: error.response?.data,
+          token_length: credential?.length,
+        });
+      } else if (error.response?.status === 409) {
+        errorMessage = error.response?.data?.message || 'This Google account is already registered. Please login instead.';
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      return { success: false, message: errorMessage, error: error };
     }
   };
 

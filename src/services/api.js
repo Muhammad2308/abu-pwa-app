@@ -163,8 +163,8 @@ export const donorSessionsAPI = {
   checkDevice: () => api.get('/api/donor-sessions/check-device'),
   updateUsername: (sessionId, username) => api.put(`/api/donor-sessions/${sessionId}/username`, { username }),
   updatePassword: (sessionId, passwordData) => api.put(`/api/donor-sessions/${sessionId}/password`, passwordData),
-  googleLogin: (token) => api.post('/api/donor-sessions/google-login', { token }),
-  googleRegister: (token) => api.post('/api/donor-sessions/google-register', { token }),
+  googleLogin: (data) => api.post('/api/donor-sessions/google-login', data),
+  googleRegister: (data) => api.post('/api/donor-sessions/google-register', data),
 };
 
 // Utility functions

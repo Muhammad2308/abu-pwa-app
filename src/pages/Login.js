@@ -82,8 +82,19 @@ const Login = () => {
         const redirectTo = location.state?.from?.pathname || '/';
         navigate(redirectTo, { replace: true });
       } else {
-        toast.error(result.message || 'Login failed');
-        setErrors({ submit: result.message || 'Login failed' });
+        // Show error message - if it's a Google account error, show it prominently
+        const errorMsg = result.message || 'Login failed';
+        const isGoogleAccountError = errorMsg.toLowerCase().includes('google');
+        
+        if (isGoogleAccountError) {
+          toast.error(errorMsg, { 
+            duration: 6000,
+            icon: '🔵',
+          });
+        } else {
+          toast.error(errorMsg);
+        }
+        setErrors({ submit: errorMsg });
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -101,14 +112,20 @@ const Login = () => {
       const result = await googleLogin(idToken);
       if (result.success) {
         toast.success(result.message || 'Google login successful!');
-        const redirectTo = location.state?.from?.pathname || '/';
-        navigate(redirectTo, { replace: true });
+        // Small delay to ensure state is updated before navigation
+        setTimeout(() => {
+          const redirectTo = location.state?.from?.pathname || '/';
+          navigate(redirectTo, { replace: true });
+        }, 100);
       } else {
-        toast.error(result.message || 'Google login failed');
+        // Show detailed error message
+        const errorMsg = result.message || 'Google login failed';
+        toast.error(errorMsg, { duration: 5000 });
       }
     } catch (error) {
       console.error('Google login error:', error);
-      toast.error('Google login failed. Please try again.');
+      const errorMsg = error.response?.data?.message || error.message || 'Google login failed. Please try again.';
+      toast.error(errorMsg, { duration: 5000 });
     } finally {
       setIsGoogleLoading(false);
     }
