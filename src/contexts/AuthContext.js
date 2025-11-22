@@ -694,6 +694,57 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('device_fingerprint');
   };
 
+  // Forgot Password - Request Reset Code
+  const requestPasswordReset = async (email) => {
+    try {
+      const response = await donorSessionsAPI.requestPasswordReset(email);
+      
+      if (response.data?.success) {
+        return { success: true, message: response.data.message || 'Reset code sent to your email' };
+      } else {
+        return { success: false, message: response.data?.message || 'Failed to send reset code' };
+      }
+    } catch (error) {
+      console.error('Request password reset error:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to send reset code';
+      return { success: false, message: errorMessage, error: error };
+    }
+  };
+
+  // Forgot Password - Verify Reset Code
+  const verifyResetCode = async (email, code) => {
+    try {
+      const response = await donorSessionsAPI.verifyResetCode(email, code);
+      
+      if (response.data?.success) {
+        return { success: true, message: response.data.message || 'Code verified successfully' };
+      } else {
+        return { success: false, message: response.data?.message || 'Invalid or expired code' };
+      }
+    } catch (error) {
+      console.error('Verify reset code error:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to verify code';
+      return { success: false, message: errorMessage, error: error };
+    }
+  };
+
+  // Forgot Password - Reset Password
+  const resetPassword = async (email, code, newPassword) => {
+    try {
+      const response = await donorSessionsAPI.resetPassword(email, code, newPassword);
+      
+      if (response.data?.success) {
+        return { success: true, message: response.data.message || 'Password reset successful' };
+      } else {
+        return { success: false, message: response.data?.message || 'Failed to reset password' };
+      }
+    } catch (error) {
+      console.error('Reset password error:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to reset password';
+      return { success: false, message: errorMessage, error: error };
+    }
+  };
+
   const value = {
     // State
     user,
@@ -720,6 +771,10 @@ export const AuthProvider = ({ children }) => {
     // Google OAuth methods
     googleLogin,
     googleRegister,
+    // Forgot Password methods
+    requestPasswordReset,
+    verifyResetCode,
+    resetPassword,
   };
 
   return (

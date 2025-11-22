@@ -7,7 +7,7 @@ import { FaHeart, FaHandHoldingHeart, FaBars, FaChevronDown, FaUser, FaEdit, FaS
 import { useAuth } from '../contexts/AuthContext';
 import UserProfileModal from './UserProfileModal';
 import toast from 'react-hot-toast';
-import api from '../services/api';
+import api, { getBaseUrl } from '../services/api';
 
 const Layout = ({ children }) => {
   const navigate = useNavigate();
@@ -214,9 +214,29 @@ const Layout = ({ children }) => {
                 title="User Menu"
               >
                 <div className="flex items-center gap-1.5 px-2 py-1 rounded-full border border-gray-200 bg-white shadow-sm transition-all duration-150 hover:border-gray-300">
-                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-50 text-blue-600">
-                    <FaUser className="w-3.5 h-3.5" />
-                  </div>
+                  {/* User Profile Image or Icon */}
+                  {user?.profile_image ? (
+                    <div className="flex items-center justify-center w-8 h-8 rounded-full overflow-hidden border border-gray-200 bg-blue-50 relative">
+                      <img 
+                        src={user.profile_image.startsWith('http') ? user.profile_image : `${getBaseUrl()}storage/${user.profile_image}`}
+                        alt={user.email || 'User'}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          // Fallback to icon if image fails to load
+                          e.target.style.display = 'none';
+                          const fallback = e.target.parentElement.querySelector('.fallback-icon');
+                          if (fallback) fallback.style.display = 'flex';
+                        }}
+                      />
+                      <div className="hidden fallback-icon absolute inset-0 items-center justify-center bg-blue-50 text-blue-600">
+                        <FaUser className="w-3.5 h-3.5" />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-50 text-blue-600">
+                      <FaUser className="w-3.5 h-3.5" />
+                    </div>
+                  )}
                   <div className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-gray-500 border border-gray-200">
                     <FaChevronDown className="w-3 h-3" />
                   </div>
@@ -224,8 +244,15 @@ const Layout = ({ children }) => {
               </button>
               {/* Dropdown Menu */}
               {showUserDropdown && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden">
+                <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden">
                   <>
+                    {/* User Email */}
+                    {user?.email && (
+                      <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+                        <p className="text-xs text-gray-500 mb-1">Signed in as</p>
+                        <p className="text-sm font-medium text-gray-900 truncate">{user.email}</p>
+                      </div>
+                    )}
                     <button
                       onClick={() => {
                         setShowProfileModal(true);

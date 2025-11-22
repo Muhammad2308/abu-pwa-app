@@ -14,6 +14,8 @@ const Profile = lazy(() => import('./pages/Profile'));
 const Donations = lazy(() => import('./pages/Donations'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const AddressableAlumni = lazy(() => import('./pages/register/AddressableAlumni'));
 const NonAddressableAlumni = lazy(() => import('./pages/register/NonAddressableAlumni'));
 const Friends = lazy(() => import('./pages/register/Friends'));
@@ -28,6 +30,8 @@ function App() {
             {/* Public routes */}
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/register/addressable_alumni" element={<AddressableAlumni />} />
             <Route path="/register/non_addressable_alumni" element={<NonAddressableAlumni />} />
             <Route path="/register/friends" element={<Friends />} />

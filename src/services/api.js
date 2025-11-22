@@ -165,6 +165,10 @@ export const donorSessionsAPI = {
   updatePassword: (sessionId, passwordData) => api.put(`/api/donor-sessions/${sessionId}/password`, passwordData),
   googleLogin: (data) => api.post('/api/donor-sessions/google-login', data),
   googleRegister: (data) => api.post('/api/donor-sessions/google-register', data),
+  // Forgot Password endpoints
+  requestPasswordReset: (email) => api.post('/api/donor-sessions/forgot-password', { email }),
+  verifyResetCode: (email, code) => api.post('/api/donor-sessions/verify-reset-code', { email, code }),
+  resetPassword: (email, code, newPassword) => api.post('/api/donor-sessions/reset-password', { email, code, password: newPassword }),
 };
 
 // Utility functions

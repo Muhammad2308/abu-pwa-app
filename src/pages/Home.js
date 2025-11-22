@@ -4,7 +4,7 @@ import { formatNaira, donationsAPI, donorsAPI } from '../services/api';
 import { ArrowUpRightIcon, UserPlusIcon, ClockIcon } from '@heroicons/react/24/outline';
 import { FaUser, FaUserPlus, FaEdit, FaSignOutAlt, FaCog } from 'react-icons/fa';
 import api from '../services/api';
-import { FaHandHoldingHeart, FaProjectDiagram, FaAddressBook, FaTimes, FaEye, FaChevronRight } from 'react-icons/fa';
+import { FaHandHoldingHeart, FaProjectDiagram, FaAddressBook, FaTimes, FaEye, FaChevronRight, FaChevronLeft, FaSearch, FaEnvelope, FaUserFriends, FaPaperPlane, FaSpinner } from 'react-icons/fa';
 import { getBaseUrl } from '../services/api';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { getDeviceFingerprint } from '../utils/deviceFingerprint';
@@ -21,6 +21,9 @@ const Home = () => {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showImageGallery, setShowImageGallery] = useState(false);
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const userDropdownRef = React.useRef(null);
 
   const [projects, setProjects] = useState([]);
@@ -32,9 +35,17 @@ const Home = () => {
   const [messages, setMessages] = useState([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [messagesError, setMessagesError] = useState(null);
-  // Tab state - default to My Donations tab
-  const [activeTab, setActiveTab] = useState('contact');
-  // Donation history state for Contact tab (changed from donors)
+  // Alumni list state
+  const [alumniList, setAlumniList] = useState([]);
+  const [filteredAlumni, setFilteredAlumni] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [alumniLoading, setAlumniLoading] = useState(false);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [selectedAlumni, setSelectedAlumni] = useState(null);
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailBody, setEmailBody] = useState('');
+  const [sendingEmail, setSendingEmail] = useState(false);
+  // Donation history state (for history modal)
   const [donationHistory, setDonationHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState(null);
@@ -44,9 +55,9 @@ const Home = () => {
   const navigate = useNavigate();
   const thankYou = location.state?.thankYou;
 
-  // Fetch donation history when Contact tab is active or history modal opens
+  // Fetch donation history when history modal opens
   useEffect(() => {
-    if ((activeTab === 'contact' || showHistoryModal) && user && isDeviceRecognized) {
+    if (showHistoryModal && user && isDeviceRecognized) {
       setHistoryLoading(true);
       setHistoryError(null);
       donationsAPI.getHistory()
@@ -69,34 +80,75 @@ const Home = () => {
           setHistoryLoading(false);
           console.error('Donation history error:', err);
         });
-    } else if ((activeTab === 'contact' || showHistoryModal) && !user) {
-      setDonationHistory([]);
-      setHistoryError(null);
     }
-  }, [activeTab, showHistoryModal, user, isDeviceRecognized, thankYou]); // Refresh when thankYou state changes or modal opens
+  }, [showHistoryModal, user, isDeviceRecognized, thankYou]);
 
+  // Fetch alumni list
+  useEffect(() => {
+    fetchAlumniList();
+  }, []);
+
+  // Filter alumni based on search query
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredAlumni(alumniList);
+    } else {
+      const query = searchQuery.toLowerCase();
+      const filtered = alumniList.filter(alumni => {
+        const fullName = `${alumni.name || ''} ${alumni.surname || ''} ${alumni.other_name || ''}`.toLowerCase();
+        const email = (alumni.email || '').toLowerCase();
+        return fullName.includes(query) || email.includes(query);
+      });
+      setFilteredAlumni(filtered);
+    }
+  }, [searchQuery, alumniList]);
+
+  const fetchAlumniList = async () => {
+    setAlumniLoading(true);
+    try {
+      const response = await api.get('/api/donors');
+      const alumni = Array.isArray(response.data) ? response.data : response.data?.data || response.data?.donors || [];
+      // Filter to show only alumni with email
+      const alumniWithEmail = alumni.filter(a => a.email && a.email.trim() !== '');
+      setAlumniList(alumniWithEmail);
+      setFilteredAlumni(alumniWithEmail);
+    } catch (error) {
+      console.error('Error fetching alumni list:', error);
+      toast.error('Failed to load alumni list');
+      setAlumniList([]);
+      setFilteredAlumni([]);
+    } finally {
+      setAlumniLoading(false);
+    }
+  };
+
+  // Helper to normalize image path
+  const normalizeImagePath = (imagePath) => {
+    const baseUrl = getBaseUrl();
+    if (!imagePath || imagePath.trim() === '') return null;
+    
+    const path = imagePath.trim();
+    // If it's already a full URL, return as is
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return path;
+    }
+    // Normalize path - remove leading slash if present
+    const normalizedPath = path.startsWith('/') ? path.slice(1) : path;
+    
+    // Check if path already includes 'storage'
+    if (normalizedPath.startsWith('storage/')) {
+      return baseUrl + normalizedPath;
+    }
+    // Otherwise, add storage/ prefix
+    return baseUrl + 'storage/' + normalizedPath;
+  };
 
   // Helper to get single image for a project (icon_image, or fallback to first body_image)
   const getProjectImage = (project) => {
-    const baseUrl = getBaseUrl();
-    
-    // First priority: icon_image (check if it exists and is not empty)
+    // First priority: icon_image
     const iconImage = project.icon_image || project.icon_image_path;
     if (iconImage && iconImage.trim() !== '') {
-      const iconPath = iconImage.trim();
-      // If it's already a full URL, return as is
-      if (iconPath.startsWith('http://') || iconPath.startsWith('https://')) {
-        return iconPath;
-      }
-      // Normalize path - remove leading slash if present
-      const normalizedPath = iconPath.startsWith('/') ? iconPath.slice(1) : iconPath;
-      
-      // Check if path already includes 'storage'
-      if (normalizedPath.startsWith('storage/')) {
-        return baseUrl + normalizedPath;
-      }
-      // Otherwise, add storage/ prefix
-      return baseUrl + 'storage/' + normalizedPath;
+      return normalizeImagePath(iconImage);
     }
     
     // Second priority: first body_image from project_photos table
@@ -104,26 +156,134 @@ const Home = () => {
       for (const photo of project.photos) {
         const bodyImage = photo.body_image || photo.body_image_path;
         if (bodyImage && bodyImage.trim() !== '') {
-          const bodyPath = bodyImage.trim();
-          // If it's already a full URL, return as is
-          if (bodyPath.startsWith('http://') || bodyPath.startsWith('https://')) {
-            return bodyPath;
-          }
-          // Normalize path - remove leading slash if present
-          const normalizedPath = bodyPath.startsWith('/') ? bodyPath.slice(1) : bodyPath;
-          
-          // Check if path already includes 'storage'
-          if (normalizedPath.startsWith('storage/')) {
-            return baseUrl + normalizedPath;
-          }
-          // Otherwise, add storage/ prefix
-          return baseUrl + 'storage/' + normalizedPath;
+          return normalizeImagePath(bodyImage);
         }
       }
     }
     
-    // Fallback: Use a data URI for a simple gray placeholder (no external dependency)
+    // Fallback: Use a data URI for a simple gray placeholder
     return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
+  };
+
+  // Helper to get all images for a project (icon_image + all body_images)
+  const getAllProjectImages = (project) => {
+    const images = [];
+    const baseUrl = getBaseUrl();
+    
+    // Add icon_image first if it exists
+    const iconImage = project.icon_image || project.icon_image_path;
+    if (iconImage && iconImage.trim() !== '') {
+      images.push(normalizeImagePath(iconImage));
+    }
+    
+    // Add all body_images from project_photos
+    if (project.photos && Array.isArray(project.photos) && project.photos.length > 0) {
+      project.photos.forEach((photo) => {
+        const bodyImage = photo.body_image || photo.body_image_path;
+        if (bodyImage && bodyImage.trim() !== '') {
+          const normalized = normalizeImagePath(bodyImage);
+          // Avoid duplicates (in case icon_image is same as a body_image)
+          if (normalized && !images.includes(normalized)) {
+            images.push(normalized);
+          }
+        }
+      });
+    }
+    
+    // If no images found, return placeholder
+    if (images.length === 0) {
+      return ['data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg=='];
+    }
+    
+    return images;
+  };
+
+  // Open image gallery modal
+  const openImageGallery = (project, imageIndex = 0) => {
+    setSelectedProject(project);
+    setSelectedImageIndex(imageIndex);
+    setShowImageGallery(true);
+  };
+
+  // Close image gallery modal
+  const closeImageGallery = () => {
+    setShowImageGallery(false);
+    setSelectedProject(null);
+    setSelectedImageIndex(0);
+  };
+
+  // Navigate to previous image
+  const previousImage = () => {
+    if (!selectedProject) return;
+    const images = getAllProjectImages(selectedProject);
+    setSelectedImageIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1));
+  };
+
+  // Navigate to next image
+  const nextImage = () => {
+    if (!selectedProject) return;
+    const images = getAllProjectImages(selectedProject);
+    setSelectedImageIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0));
+  };
+
+  // Get full name for alumni
+  const getAlumniFullName = (alumni) => {
+    const parts = [alumni.name, alumni.surname, alumni.other_name].filter(Boolean);
+    return parts.join(' ') || 'Unknown';
+  };
+
+  // Open email composition modal
+  const openEmailModal = (alumni, isInvite = false) => {
+    setSelectedAlumni(alumni);
+    if (isInvite) {
+      // Auto-construct invitation email
+      const inviteSubject = 'Invitation to Join ABU Endowment & Crowd Funding';
+      const inviteBody = `Dear ${getAlumniFullName(alumni)},\n\n` +
+        `I hope this message finds you well. I am reaching out to invite you to join the ABU Endowment & Crowd Funding platform.\n\n` +
+        `As a fellow ABU alumnus, your participation would be invaluable in supporting our alma mater's development initiatives.\n\n` +
+        `The platform allows you to:\n` +
+        `• Make donations to various projects\n` +
+        `• Track your contributions\n` +
+        `• Stay updated on ongoing initiatives\n` +
+        `• Connect with other alumni\n\n` +
+        `You can register and get started by visiting our platform.\n\n` +
+        `Thank you for considering this invitation.\n\n` +
+        `Best regards,\n` +
+        `${user?.name || 'ABU Endowment Team'}`;
+      setEmailSubject(inviteSubject);
+      setEmailBody(inviteBody);
+    } else {
+      setEmailSubject('');
+      setEmailBody('');
+    }
+    setShowEmailModal(true);
+  };
+
+  // Send email
+  const handleSendEmail = async () => {
+    if (!selectedAlumni || !emailSubject.trim() || !emailBody.trim()) {
+      toast.error('Please fill in both subject and message');
+      return;
+    }
+
+    setSendingEmail(true);
+    try {
+      // TODO: Replace with actual email API endpoint
+      // For now, we'll use mailto link as fallback
+      const mailtoLink = `mailto:${selectedAlumni.email}?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
+      window.location.href = mailtoLink;
+      
+      toast.success('Email client opened. Please send the email manually.');
+      setShowEmailModal(false);
+      setSelectedAlumni(null);
+      setEmailSubject('');
+      setEmailBody('');
+    } catch (error) {
+      console.error('Error sending email:', error);
+      toast.error('Failed to send email');
+    } finally {
+      setSendingEmail(false);
+    }
   };
 
   // Handle thank you message and refresh donations
@@ -245,8 +405,8 @@ const Home = () => {
       checkDeviceRecognition();
     }
     
-    // Refresh donation history if on donations tab
-    if (activeTab === 'contact' && user && isDeviceRecognized) {
+    // Refresh donation history if modal is open
+    if (showHistoryModal && user && isDeviceRecognized) {
       donationsAPI.getHistory()
         .then(res => {
           const donations = res.data.donations || res.data || [];
@@ -307,20 +467,31 @@ const Home = () => {
                 <span className="text-sm font-medium opacity-90">My Donations</span>
                 {user && isDeviceRecognized && <FaEye className="w-4 h-4 opacity-75" />}
               </div>
-              {/* Right: Transaction History - Always visible */}
-              <button
-                onClick={() => {
-                  if (user && isDeviceRecognized) {
-                    setShowHistoryModal(true);
-                  } else {
-                    toast.info('Please login to view your transaction history');
-                  }
-                }}
-                className="flex items-center gap-1 text-sm font-medium opacity-90 hover:opacity-100 transition-opacity"
-              >
-                <span>History</span>
-                <FaChevronRight className="w-3 h-3" />
-              </button>
+              {/* Right: User Name and Transaction History */}
+              <div className="flex items-center gap-3">
+                {/* User Name */}
+                {user && isDeviceRecognized && (user.name || user.surname) && (
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-white opacity-95">
+                      {[user.name, user.surname].filter(Boolean).join(' ') || user.email}
+                    </p>
+                  </div>
+                )}
+                {/* Transaction History - Always visible */}
+                <button
+                  onClick={() => {
+                    if (user && isDeviceRecognized) {
+                      setShowHistoryModal(true);
+                    } else {
+                      toast.info('Please login to view your transaction history');
+                    }
+                  }}
+                  className="flex items-center gap-1 text-sm font-medium opacity-90 hover:opacity-100 transition-opacity"
+                >
+                  <span>History</span>
+                  <FaChevronRight className="w-3 h-3" />
+                </button>
+              </div>
             </div>
 
             {/* Balance Amount */}
@@ -417,8 +588,11 @@ const Home = () => {
                     key={project.id}
                     className="group bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-gray-100 transform hover:-translate-y-1"
                   >
-                    {/* Image Section with Overlay */}
-                    <div className="relative h-48 overflow-hidden bg-gray-200">
+                    {/* Image Section with Overlay - Clickable */}
+                    <div 
+                      className="relative h-48 overflow-hidden bg-gray-200 cursor-pointer"
+                      onClick={() => openImageGallery(project, 0)}
+                    >
                       <img
                         src={projectImage}
                         alt={project.project_title}
@@ -440,6 +614,12 @@ const Home = () => {
                           }
                         }}
                       />
+                      {/* Click indicator overlay */}
+                      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-all duration-300 flex items-center justify-center">
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-white bg-opacity-90 rounded-full p-2">
+                          <FaEye className="w-5 h-5 text-gray-700" />
+                        </div>
+                      </div>
                       {/* Gradient Overlay */}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent"></div>
                       
@@ -546,296 +726,105 @@ const Home = () => {
         </div>
       </div>
 
-      {/* Tab Navigation */}
-      <div className="flex bg-gray-100 rounded-lg p-1 mb-6">
-        <button
-          onClick={() => setActiveTab('contact')}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
-            activeTab === 'contact'
-              ? 'bg-white text-primary-600 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          <FaHandHoldingHeart className="text-base" />
-          My Donations
-        </button>
-        <button
-          onClick={() => setActiveTab('notifications')}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
-            activeTab === 'notifications'
-              ? 'bg-white text-primary-600 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          <ClockIcon className="h-5 w-5" />
-          Notifications
-        </button>
-        {/* User Dropdown Button */}
-        <div className="relative flex-1" ref={userDropdownRef}>
-          <button
-            onClick={() => setShowUserDropdown(!showUserDropdown)}
-            className={`w-full py-2 px-4 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
-              showUserDropdown
-                ? 'bg-white text-primary-600 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-            aria-label="User Menu"
-          >
-            <FaUser className="text-base" />
-          </button>
-          {/* Dropdown Menu */}
-          {showUserDropdown && (
-            <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden">
-              <button
-                onClick={() => {
-                  setShowProfileModal(true);
-                  setShowUserDropdown(false);
-                }}
-                className="w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-3 transition-colors"
-              >
-                <FaEdit className="text-base text-blue-600" />
-                <span>Edit Profile</span>
-              </button>
-              <button
-                onClick={handleSettings}
-                className="w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-3 transition-colors"
-              >
-                <FaCog className="text-base text-gray-600" />
-                <span>Settings</span>
-              </button>
-              <button
-                onClick={() => {
-                  setShowUserDropdown(false);
-                  handleLogout();
-                }}
-                className="w-full px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors border-t border-gray-200"
-              >
-                <FaSignOutAlt className="text-base" />
-                <span>Logout</span>
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Tab Content */}
+      {/* Alumni List Section */}
       <div className="mb-24">
-        {/* Notifications Tab */}
-        {activeTab === 'notifications' && (
-          <div>
-            <div className="flex items-center gap-2 mb-4">
-              <ClockIcon className="h-5 w-5 text-primary-600" />
-              <h3 className="text-lg font-semibold">Notifications</h3>
-            </div>
-            <ul className="divide-y divide-gray-100 bg-white rounded-lg shadow h-64 overflow-y-auto">
-              {messagesLoading ? (
-                <li className="px-4 py-2 text-center text-gray-500">Loading messages...</li>
-              ) : messagesError ? (
-                <li className="px-4 py-2 text-center text-red-500">{messagesError}</li>
-              ) : messages && messages.length > 0 ? (
-                messages.map((msg, idx) => (
-                  <li key={msg.id || idx} className="px-4 py-2">
-                    {msg.subject && (
-                      <span className="inline-block bg-blue-100 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded-full mb-2 mr-2 align-middle">
-                        {msg.subject}
-                      </span>
-                    )}
-                    <div className="bg-blue-50 text-blue-900 rounded-lg px-3 py-2 mb-1 mt-1" style={{marginTop: msg.subject ? '0.25rem' : 0}}>
-                      {msg.body || msg.message}
-                    </div>
-                    <div className="text-xs text-gray-400 mt-1">{msg.date_sent ? new Date(msg.date_sent).toLocaleString() : ''}</div>
-                  </li>
-                ))
-              ) : (
-                <li className="px-4 py-2 text-center text-gray-400">No messages</li>
-              )}
-            </ul>
-          </div>
-        )}
-
-        {/* My Donations Tab */}
-        {activeTab === 'contact' && (
-          <div>
-            {!user || !isDeviceRecognized ? (
-              <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
-                <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center">
-                  <FaHandHoldingHeart className="text-3xl text-blue-600" />
-                </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">No Donation History</h3>
-                <p className="text-gray-600 mb-6">Please login or make a donation to view your donation history</p>
-                <button
-                  onClick={() => navigate('/donations')}
-                  className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-8 py-3 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all transform hover:scale-105 shadow-lg font-semibold"
-                >
-                  Make a Donation
-                </button>
+        {/* Header with Search and Compose Button */}
+        <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                <FaUserFriends className="text-white text-xl" />
               </div>
-            ) : (
-              <>
-                {/* Summary Card with enhanced design */}
-                <div className="bg-gradient-to-br from-blue-600 via-blue-700 to-purple-600 rounded-2xl shadow-2xl p-6 mb-6 text-white relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full -mr-16 -mt-16"></div>
-                  <div className="absolute bottom-0 left-0 w-24 h-24 bg-white opacity-10 rounded-full -ml-12 -mb-12"></div>
-                  <div className="relative z-10">
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <h3 className="text-lg font-semibold opacity-90 mb-1">Total Contributions</h3>
-                        <div className="text-4xl font-bold">{formatNaira(totalDonated)}</div>
-                      </div>
-                      <div className="w-16 h-16 bg-white bg-opacity-20 rounded-full flex items-center justify-center backdrop-blur-sm">
-                        <FaHandHoldingHeart className="text-2xl" />
-                      </div>
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Alumni Directory</h2>
+                <p className="text-sm text-gray-500">Connect and invite fellow alumni</p>
+              </div>
+            </div>
+            <button
+              onClick={() => openEmailModal(null, false)}
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 transition-all transform hover:scale-105 shadow-lg"
+            >
+              <FaEnvelope className="text-base" />
+              <span>Compose Email</span>
+            </button>
+          </div>
+
+          {/* Search Bar */}
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+              <FaSearch className="text-gray-400" />
+            </div>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by name or email..."
+              className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+            />
+          </div>
+        </div>
+
+        {/* Alumni List */}
+        {alumniLoading ? (
+          <div className="text-center py-12">
+            <FaSpinner className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+            <p className="text-gray-500 font-medium">Loading alumni...</p>
+          </div>
+        ) : filteredAlumni.length === 0 ? (
+          <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
+            <div className="w-20 h-20 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+              <FaUserFriends className="text-3xl text-gray-400" />
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">
+              {searchQuery ? 'No alumni found' : 'No alumni available'}
+            </h3>
+            <p className="text-gray-600">
+              {searchQuery ? 'Try a different search term' : 'Alumni list will appear here once available'}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredAlumni.map((alumni) => (
+              <div
+                key={alumni.id}
+                className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 p-5 border border-gray-100 transform hover:-translate-y-1"
+              >
+                {/* Alumni Info */}
+                <div className="mb-4">
+                  <div className="flex items-start gap-3 mb-2">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-blue-600 font-bold text-lg">
+                        {getAlumniFullName(alumni).charAt(0).toUpperCase()}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-4 mt-4 pt-4 border-t border-white border-opacity-20">
-                      <div className="flex-1">
-                        <div className="text-2xl font-bold">{donationHistory.length}</div>
-                        <div className="text-xs opacity-80">Total Donations</div>
-                      </div>
-                      <div className="flex-1">
-                        <div className="text-2xl font-bold">
-                          {donationHistory.filter(d => d.status === 'success').length}
-                        </div>
-                        <div className="text-xs opacity-80">Successful</div>
-                      </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-bold text-gray-900 text-base mb-1 line-clamp-2">
+                        {getAlumniFullName(alumni)}
+                      </h3>
+                      <p className="text-sm text-gray-500 truncate">{alumni.email}</p>
                     </div>
                   </div>
                 </div>
 
-                {/* Donation History */}
-                {historyLoading ? (
-                  <div className="text-center py-12">
-                    <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-600"></div>
-                    <p className="mt-4 text-gray-500 font-medium">Loading your donations...</p>
-                  </div>
-                ) : historyError ? (
-                  <div className="bg-red-50 border-2 border-red-200 rounded-xl p-6 text-center">
-                    <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                      <span className="text-red-600 text-xl">⚠️</span>
-                    </div>
-                    <p className="text-red-600 font-semibold mb-2">Error Loading Donations</p>
-                    <p className="text-red-500 text-sm">{historyError}</p>
-                    <button
-                      onClick={() => setActiveTab('contact')}
-                      className="mt-4 text-blue-600 hover:text-blue-700 font-medium text-sm"
-                    >
-                      Try Again
-                    </button>
-                  </div>
-                ) : donationHistory.length === 0 ? (
-                  <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
-                    <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center">
-                      <FaHandHoldingHeart className="text-3xl text-blue-600" />
-                    </div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-2">No Donations Yet</h3>
-                    <p className="text-gray-600 mb-6">Start making a difference today!</p>
-                    <button
-                      onClick={() => navigate('/donations')}
-                      className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-8 py-3 rounded-xl hover:from-blue-700 hover:to-blue-800 transition-all transform hover:scale-105 shadow-lg font-semibold"
-                    >
-                      Make Your First Donation
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Recent Donations</h4>
-                      <span className="text-xs text-gray-500">{donationHistory.length} items</span>
-                    </div>
-                    {donationHistory.map((donation, index) => {
-                      const date = new Date(donation.created_at || donation.createdAt || donation.date);
-                      const formattedDate = date.toLocaleDateString('en-US', { 
-                        month: 'short', 
-                        day: 'numeric', 
-                        year: 'numeric' 
-                      });
-                      const formattedTime = date.toLocaleTimeString('en-US', { 
-                        hour: '2-digit', 
-                        minute: '2-digit',
-                        hour12: true
-                      });
-                      const projectName = donation.project?.project_title || donation.project_title || 'Endowment Fund';
-                      const isProject = donation.project_id || donation.project?.id;
-                      const isSuccess = donation.status === 'success' || !donation.status;
-                      const statusColor = isSuccess ? 'green' : donation.status === 'pending' ? 'yellow' : 'red';
-                      
-                      return (
-                        <div
-                          key={donation.id || index}
-                          className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 p-5 border-l-4 border-blue-500 transform hover:-translate-y-1"
-                        >
-                          <div className="flex items-start gap-4">
-                            {/* Icon */}
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                              isProject ? 'bg-gradient-to-br from-purple-100 to-purple-200' : 'bg-gradient-to-br from-blue-100 to-blue-200'
-                            }`}>
-                              {isProject ? (
-                                <FaProjectDiagram className="text-xl text-purple-600" />
-                              ) : (
-                                <FaHandHoldingHeart className="text-xl text-blue-600" />
-                              )}
-                            </div>
-                            
-                            {/* Content */}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-start justify-between gap-2 mb-2">
-                                <div className="flex-1">
-                                  <h4 className="font-bold text-gray-900 text-base mb-1 line-clamp-1">
-                                    {projectName}
-                                  </h4>
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <div className="flex items-center gap-1 text-xs text-gray-500">
-                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                      </svg>
-                                      <span>{formattedDate}</span>
-                                    </div>
-                                    <span className="text-gray-300">•</span>
-                                    <div className="flex items-center gap-1 text-xs text-gray-500">
-                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                      </svg>
-                                      <span>{formattedTime}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                                
-                                {/* Amount & Status */}
-                                <div className="text-right flex-shrink-0">
-                                  <div className="text-xl font-bold text-blue-600 mb-1">
-                                    {formatNaira(donation.amount)}
-                                  </div>
-                                  <div className={`text-xs px-2.5 py-1 rounded-full font-semibold inline-block ${
-                                    isSuccess
-                                      ? 'bg-green-100 text-green-700' 
-                                      : donation.status === 'pending'
-                                      ? 'bg-yellow-100 text-yellow-700'
-                                      : 'bg-red-100 text-red-700'
-                                  }`}>
-                                    {isSuccess ? '✓ Success' : donation.status?.toUpperCase() || 'SUCCESS'}
-                                  </div>
-                                </div>
-                              </div>
-                              
-                              {/* Payment Reference */}
-                              {donation.payment_reference && (
-                                <div className="mt-3 pt-3 border-t border-gray-100">
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="text-gray-500 font-medium">Transaction ID:</span>
-                                    <span className="text-gray-700 font-mono bg-gray-50 px-2 py-1 rounded">
-                                      {donation.payment_reference}
-                                    </span>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </>
-            )}
+                {/* Action Buttons */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => openEmailModal(alumni, false)}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-50 text-blue-600 rounded-lg font-semibold hover:bg-blue-100 transition-all transform hover:scale-105"
+                  >
+                    <FaEnvelope className="text-sm" />
+                    <span>Message</span>
+                  </button>
+                  <button
+                    onClick={() => openEmailModal(alumni, true)}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all transform hover:scale-105 shadow-md"
+                  >
+                    <FaPaperPlane className="text-sm" />
+                    <span>Invite</span>
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -995,6 +984,211 @@ const Home = () => {
                   })}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Image Gallery Modal */}
+      {showImageGallery && selectedProject && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4"
+          onClick={closeImageGallery}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[95vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-purple-600 text-white">
+              <div className="flex-1">
+                <h2 className="text-2xl font-bold">{selectedProject.project_title}</h2>
+                <p className="text-sm opacity-90 mt-1">
+                  Image {selectedImageIndex + 1} of {getAllProjectImages(selectedProject).length}
+                </p>
+              </div>
+              <button
+                onClick={closeImageGallery}
+                className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white hover:bg-opacity-20 transition-colors"
+                aria-label="Close gallery"
+              >
+                <FaTimes className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Main Image View */}
+            <div className="flex-1 relative bg-black flex items-center justify-center p-4 min-h-[400px]">
+              {getAllProjectImages(selectedProject).length > 1 && (
+                <>
+                  {/* Previous Button */}
+                  <button
+                    onClick={previousImage}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-full flex items-center justify-center shadow-lg transition-all z-10"
+                    aria-label="Previous image"
+                  >
+                    <FaChevronLeft className="w-5 h-5 text-gray-800" />
+                  </button>
+                  
+                  {/* Next Button */}
+                  <button
+                    onClick={nextImage}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-white bg-opacity-90 hover:bg-opacity-100 rounded-full flex items-center justify-center shadow-lg transition-all z-10"
+                    aria-label="Next image"
+                  >
+                    <FaChevronRight className="w-5 h-5 text-gray-800" />
+                  </button>
+                </>
+              )}
+              
+              {/* Large Image */}
+              <img
+                src={getAllProjectImages(selectedProject)[selectedImageIndex]}
+                alt={`${selectedProject.project_title} - Image ${selectedImageIndex + 1}`}
+                className="max-w-full max-h-[60vh] object-contain rounded-lg"
+                onError={(e) => {
+                  e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
+                }}
+              />
+            </div>
+
+            {/* Thumbnail Gallery */}
+            <div className="p-4 bg-gray-50 border-t border-gray-200">
+              <div className="flex gap-3 overflow-x-auto pb-2">
+                {getAllProjectImages(selectedProject).map((image, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setSelectedImageIndex(index)}
+                    className={`flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 transition-all ${
+                      selectedImageIndex === index
+                        ? 'border-blue-600 ring-2 ring-blue-300 ring-offset-2'
+                        : 'border-gray-300 hover:border-gray-400'
+                    }`}
+                  >
+                    <img
+                      src={image}
+                      alt={`Thumbnail ${index + 1}`}
+                      className={`w-full h-full object-cover transition-opacity ${
+                        selectedImageIndex === index ? 'opacity-100' : 'opacity-70 hover:opacity-100'
+                      }`}
+                      onError={(e) => {
+                        e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
+                      }}
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Email Composition Modal */}
+      {showEmailModal && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+          onClick={() => setShowEmailModal(false)}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-purple-600 text-white">
+              <div>
+                <h2 className="text-2xl font-bold">Compose Email</h2>
+                {selectedAlumni && (
+                  <p className="text-sm opacity-90 mt-1">To: {selectedAlumni.email}</p>
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  setShowEmailModal(false);
+                  setSelectedAlumni(null);
+                  setEmailSubject('');
+                  setEmailBody('');
+                }}
+                className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white hover:bg-opacity-20 transition-colors"
+                aria-label="Close modal"
+              >
+                <FaTimes className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {/* Recipient (if not selected, show input) */}
+              {!selectedAlumni && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    To (Email Address)
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="Enter recipient email"
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              )}
+
+              {/* Subject */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Subject
+                </label>
+                <input
+                  type="text"
+                  value={emailSubject}
+                  onChange={(e) => setEmailSubject(e.target.value)}
+                  placeholder="Email subject"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Message Body */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Message
+                </label>
+                <textarea
+                  value={emailBody}
+                  onChange={(e) => setEmailBody(e.target.value)}
+                  placeholder="Type your message here..."
+                  rows={10}
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowEmailModal(false);
+                  setSelectedAlumni(null);
+                  setEmailSubject('');
+                  setEmailBody('');
+                }}
+                className="px-6 py-2.5 border-2 border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-100 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSendEmail}
+                disabled={sendingEmail || !emailSubject.trim() || !emailBody.trim()}
+                className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 transition-all transform hover:scale-105 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center gap-2"
+              >
+                {sendingEmail ? (
+                  <>
+                    <FaSpinner className="animate-spin" />
+                    <span>Sending...</span>
+                  </>
+                ) : (
+                  <>
+                    <FaPaperPlane className="text-sm" />
+                    <span>Send Email</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>
