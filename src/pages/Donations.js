@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { FaCreditCard, FaUser, FaSearch, FaBug } from 'react-icons/fa';
+import { FaCreditCard, FaUser, FaSearch, FaEnvelope, FaLock, FaGraduationCap, FaHandHoldingHeart, FaSpinner } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 import api, { paymentsAPI, getCsrfCookie, formatNaira } from '../services/api';
 import { getDeviceFingerprint } from '../utils/deviceFingerprint';
-import BackendTest from '../components/BackendTest';
 import SessionCreationModal from '../components/SessionCreationModal';
 import countries from '../utils/countries';
+import { GoogleSignInButton } from '../hooks/useGoogleAuth';
+import abuLogo from '../assets/abu_logo.png';
 
 const Donations = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { user, isDeviceRecognized, loading, createDonor, updateDonor, searchAlumni, isAuthenticated } = useAuth();
+  const { user, isDeviceRecognized, loading, createDonor, updateDonor, searchAlumni, isAuthenticated, register, login, googleRegister, googleLogin, checkSession } = useAuth();
   const projectFromQuery = searchParams.get('project') || '';
   const isEndowment = !projectFromQuery;
   
@@ -20,7 +21,7 @@ const Donations = () => {
   const [showSessionModal, setShowSessionModal] = useState(false);
   const [pendingDonorId, setPendingDonorId] = useState(null);
   
-  const [currentStep, setCurrentStep] = useState('donation'); // donation, registration, alumni-search
+  const [currentStep, setCurrentStep] = useState('donation'); // donation, login-register, donor-type-selection, registration, alumni-search
   const [donationData, setDonationData] = useState({
     amount: '',
     name: '',
@@ -38,6 +39,21 @@ const Donations = () => {
   const [searchPhone, setSearchPhone] = useState('');
   const [alumniData, setAlumniData] = useState(null);
   const [searching, setSearching] = useState(false);
+  
+  // Login/Register form states
+  const [isLoginMode, setIsLoginMode] = useState(true);
+  const [loginFormData, setLoginFormData] = useState({
+    email: '',
+    password: ''
+  });
+  const [registerFormData, setRegisterFormData] = useState({
+    email: '',
+    password: '',
+    password_confirmation: ''
+  });
+  const [authErrors, setAuthErrors] = useState({});
+  const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   
   // --- Multistep Registration State ---
   const [registrationStep, setRegistrationStep] = useState(1);
@@ -151,8 +167,6 @@ const Donations = () => {
     }
   };
 
-  // Debug state
-  const [showDebug, setShowDebug] = useState(false);
 
   // Load project details if project is specified
   useEffect(() => {
@@ -324,8 +338,10 @@ const Donations = () => {
       return;
     }
 
-    if (!donationData.name || !donationData.surname || !donationData.email || !donationData.phone) {
-      toast.error('Please fill in all required fields (Name, Surname, Email, Phone)');
+    // Use user data if authenticated, otherwise show error
+    if (!user || !user.email) {
+      toast.error('Please login to make a donation');
+      setCurrentStep('login-register');
       return;
     }
 
@@ -334,21 +350,23 @@ const Donations = () => {
     try {
       await getCsrfCookie();
       
-      // Prepare metadata with separate name fields
+      // Prepare metadata with separate name fields from user data
       const metadata = {
-        name: donationData.name || '',
-        surname: donationData.surname || '',
-        other_name: donationData.other_name || null,
-        phone: donationData.phone,
+        name: user.name || '',
+        surname: user.surname || '',
+        other_name: user.other_name || null,
+        phone: user.phone || '',
+        email: user.email || '',
         endowment: selectedProject ? 'no' : 'yes',
         type: selectedProject ? 'project' : 'endowment'
       };
       if (selectedProject) {
         metadata.project_id = selectedProject.id;
+        metadata.project_title = selectedProject.project_title;
       }
       
       const paymentData = {
-        email: donationData.email,
+        email: user.email || '',
         amount: donationData.amount,
         device_fingerprint: getDeviceFingerprint(),
         callback_url: `${window.location.origin}/donations`,
@@ -492,6 +510,200 @@ const Donations = () => {
     }
   }, [navigate, searchParams, selectedProject]);
 
+  // Check if user needs to login/register first
+  useEffect(() => {
+    if (!loading && !isAuthenticated && currentStep === 'donation') {
+      setCurrentStep('login-register');
+    }
+  }, [loading, isAuthenticated, currentStep]);
+
+  // Check if user needs donor type selection after registration
+  useEffect(() => {
+    if (isAuthenticated && user && !user.donor_type && currentStep !== 'donor-type-selection' && currentStep !== 'donation' && currentStep !== 'login-register') {
+      // Small delay to ensure state is stable
+      const timer = setTimeout(() => {
+        setCurrentStep('donor-type-selection');
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isAuthenticated, user, currentStep]);
+
+  // Handle login
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setAuthErrors({});
+    setIsAuthSubmitting(true);
+    
+    try {
+      const result = await login({
+        username: loginFormData.email.trim(),
+        password: loginFormData.password
+      });
+      
+      if (result.success) {
+        toast.success('Login successful!');
+        await checkSession();
+        // Wait a bit for user state to update, then check donor_type
+        setTimeout(async () => {
+          await checkSession(); // Refresh user data
+          const updatedUser = await api.get('/api/donor-sessions/me').then(res => res.data?.data?.donor).catch(() => null);
+          if (updatedUser && !updatedUser.donor_type) {
+            setCurrentStep('donor-type-selection');
+          } else {
+            setCurrentStep('donation');
+          }
+        }, 800);
+      } else {
+        setAuthErrors({ submit: result.message || 'Login failed' });
+        toast.error(result.message || 'Login failed');
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      setAuthErrors({ submit: 'An error occurred during login' });
+      toast.error('An error occurred during login');
+    } finally {
+      setIsAuthSubmitting(false);
+    }
+  };
+
+  // Handle register
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setAuthErrors({});
+    
+    if (registerFormData.password !== registerFormData.password_confirmation) {
+      setAuthErrors({ password_confirmation: 'Passwords do not match' });
+      return;
+    }
+    
+    if (registerFormData.password.length < 6) {
+      setAuthErrors({ password: 'Password must be at least 6 characters' });
+      return;
+    }
+    
+    setIsAuthSubmitting(true);
+    
+    try {
+      // First, create a minimal donor record if it doesn't exist
+      let donorId = null;
+      try {
+        const donorResponse = await api.post('/api/donors', {
+          email: registerFormData.email.trim(),
+          name: '',
+          surname: ''
+        });
+        if (donorResponse.data?.data?.id) {
+          donorId = donorResponse.data.data.id;
+        }
+      } catch (donorError) {
+        // If donor already exists, try to get it
+        if (donorError.response?.status === 409 || donorError.response?.status === 422) {
+          try {
+            const existingDonor = await api.get(`/api/donors?email=${encodeURIComponent(registerFormData.email.trim())}`);
+            if (existingDonor.data?.data?.[0]?.id) {
+              donorId = existingDonor.data.data[0].id;
+            }
+          } catch (err) {
+            console.error('Error fetching existing donor:', err);
+          }
+        }
+      }
+      
+      if (!donorId) {
+        throw new Error('Failed to create or find donor record');
+      }
+      
+      // Now register the session
+      const result = await register({
+        username: registerFormData.email.trim(),
+        password: registerFormData.password,
+        donor_id: donorId
+      });
+      
+      if (result.success) {
+        toast.success('Registration successful!');
+        await checkSession();
+        // Wait a bit for user state to update, then check donor_type
+        setTimeout(async () => {
+          await checkSession(); // Refresh user data
+          const updatedUser = await api.get('/api/donor-sessions/me').then(res => res.data?.data?.donor).catch(() => null);
+          if (updatedUser && !updatedUser.donor_type) {
+            setCurrentStep('donor-type-selection');
+          } else {
+            setCurrentStep('donation');
+          }
+        }, 800);
+      } else {
+        setAuthErrors({ submit: result.message || 'Registration failed' });
+        toast.error(result.message || 'Registration failed');
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
+      setAuthErrors({ submit: error.response?.data?.message || 'An error occurred during registration' });
+      toast.error(error.response?.data?.message || 'An error occurred during registration');
+    } finally {
+      setIsAuthSubmitting(false);
+    }
+  };
+
+  // Handle Google register/login
+  const handleGoogleAuth = async (idToken) => {
+    setIsGoogleLoading(true);
+    try {
+      // Try register first
+      let result = await googleRegister(idToken);
+      
+      // If account exists, try login
+      if (!result.success && result.error?.response?.status === 409) {
+        result = await googleLogin(idToken);
+      }
+      
+      if (result.success) {
+        toast.success('Google authentication successful!');
+        await checkSession();
+        // Wait a bit for user state to update, then check donor_type
+        setTimeout(async () => {
+          await checkSession(); // Refresh user data
+          const updatedUser = await api.get('/api/donor-sessions/me').then(res => res.data?.data?.donor).catch(() => null);
+          if (updatedUser && !updatedUser.donor_type) {
+            setCurrentStep('donor-type-selection');
+          } else {
+            setCurrentStep('donation');
+          }
+        }, 800);
+      } else {
+        toast.error(result.message || 'Google authentication failed');
+      }
+    } catch (error) {
+      console.error('Google auth error:', error);
+      toast.error('Google authentication failed');
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
+  // Handle donor type selection
+  const handleDonorTypeSelection = async (donorType) => {
+    if (!user || !user.id) {
+      toast.error('User information not available');
+      return;
+    }
+    
+    try {
+      const result = await updateDonor(user.id, { donor_type: donorType });
+      if (result.success) {
+        toast.success('Profile updated successfully!');
+        await checkSession();
+        setCurrentStep('donation');
+      } else {
+        toast.error(result.message || 'Failed to update profile');
+      }
+    } catch (error) {
+      console.error('Update donor type error:', error);
+      toast.error('Failed to update profile');
+    }
+  };
+
   // Loading state
   if (loading) {
     return (
@@ -499,6 +711,304 @@ const Donations = () => {
         <div className="text-center">
           <div className="loading-spinner mb-4"></div>
           <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Login/Register Screen
+  if (currentStep === 'login-register') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8">
+          <div className="text-center mb-8">
+            <div className="flex items-center justify-center mb-4">
+              <img src={abuLogo} alt="ABU Logo" className="h-16 w-auto" />
+              <div className="flex flex-col justify-center ml-3 h-16 text-left">
+                <span className="text-sm font-bold leading-tight text-gray-800" style={{lineHeight: '1.1'}}>ABU Endowment</span>
+                <span className="text-xs font-bold text-gray-800 leading-none">& Crowd Funding</span>
+              </div>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              {isLoginMode ? 'Login to Donate' : 'Create Account'}
+            </h2>
+            <p className="text-gray-600">
+              {isLoginMode ? 'Please login to continue with your donation' : 'Create an account to make your donation'}
+            </p>
+          </div>
+
+          {isLoginMode ? (
+            <form onSubmit={handleLogin} className="space-y-6">
+              <div>
+                <label htmlFor="loginEmail" className="block text-sm font-semibold text-gray-700 mb-2">
+                  Email
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <FaEnvelope className="text-gray-400" />
+                  </div>
+                  <input
+                    type="email"
+                    id="loginEmail"
+                    value={loginFormData.email}
+                    onChange={(e) => setLoginFormData({...loginFormData, email: e.target.value})}
+                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all ${
+                      authErrors.email ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    placeholder="Enter your email"
+                    required
+                    disabled={isAuthSubmitting}
+                  />
+                </div>
+                {authErrors.email && (
+                  <p className="mt-1 text-sm text-red-600">{authErrors.email}</p>
+                )}
+              </div>
+
+              <div>
+                <label htmlFor="loginPassword" className="block text-sm font-semibold text-gray-700 mb-2">
+                  Password
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <FaLock className="text-gray-400" />
+                  </div>
+                  <input
+                    type="password"
+                    id="loginPassword"
+                    value={loginFormData.password}
+                    onChange={(e) => setLoginFormData({...loginFormData, password: e.target.value})}
+                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all ${
+                      authErrors.password ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    placeholder="Enter your password"
+                    required
+                    disabled={isAuthSubmitting}
+                  />
+                </div>
+                {authErrors.password && (
+                  <p className="mt-1 text-sm text-red-600">{authErrors.password}</p>
+                )}
+              </div>
+
+              {authErrors.submit && (
+                <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4">
+                  <p className="text-sm text-red-600">{authErrors.submit}</p>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={isAuthSubmitting}
+                className="w-full bg-gradient-to-r from-gray-600 to-gray-700 text-white py-3 rounded-xl font-semibold hover:from-gray-700 hover:to-gray-800 transition-all transform hover:scale-105 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-2"
+              >
+                {isAuthSubmitting ? (
+                  <>
+                    <FaSpinner className="animate-spin" />
+                    <span>Logging in...</span>
+                  </>
+                ) : (
+                  'Login'
+                )}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleRegister} className="space-y-6">
+              <div>
+                <label htmlFor="registerEmail" className="block text-sm font-semibold text-gray-700 mb-2">
+                  Email
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <FaEnvelope className="text-gray-400" />
+                  </div>
+                  <input
+                    type="email"
+                    id="registerEmail"
+                    value={registerFormData.email}
+                    onChange={(e) => setRegisterFormData({...registerFormData, email: e.target.value})}
+                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all ${
+                      authErrors.email ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    placeholder="Enter your email"
+                    required
+                    disabled={isAuthSubmitting}
+                  />
+                </div>
+                {authErrors.email && (
+                  <p className="mt-1 text-sm text-red-600">{authErrors.email}</p>
+                )}
+              </div>
+
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <label htmlFor="registerPassword" className="block text-sm font-semibold text-gray-700 mb-2">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <FaLock className="text-gray-400" />
+                    </div>
+                    <input
+                      type="password"
+                      id="registerPassword"
+                      value={registerFormData.password}
+                      onChange={(e) => setRegisterFormData({...registerFormData, password: e.target.value})}
+                      className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all ${
+                        authErrors.password ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      placeholder="Password"
+                      required
+                      disabled={isAuthSubmitting}
+                    />
+                  </div>
+                  {authErrors.password && (
+                    <p className="mt-1 text-sm text-red-600">{authErrors.password}</p>
+                  )}
+                </div>
+
+                <div className="flex-1">
+                  <label htmlFor="registerPasswordConfirmation" className="block text-sm font-semibold text-gray-700 mb-2">
+                    Confirm
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <FaLock className="text-gray-400" />
+                    </div>
+                    <input
+                      type="password"
+                      id="registerPasswordConfirmation"
+                      value={registerFormData.password_confirmation}
+                      onChange={(e) => setRegisterFormData({...registerFormData, password_confirmation: e.target.value})}
+                      className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all ${
+                        authErrors.password_confirmation ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      placeholder="Confirm"
+                      required
+                      disabled={isAuthSubmitting}
+                    />
+                  </div>
+                  {authErrors.password_confirmation && (
+                    <p className="mt-1 text-sm text-red-600">{authErrors.password_confirmation}</p>
+                  )}
+                </div>
+              </div>
+
+              {authErrors.submit && (
+                <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4">
+                  <p className="text-sm text-red-600">{authErrors.submit}</p>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={isAuthSubmitting}
+                className="w-full bg-gradient-to-r from-gray-600 to-gray-700 text-white py-3 rounded-xl font-semibold hover:from-gray-700 hover:to-gray-800 transition-all transform hover:scale-105 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-2"
+              >
+                {isAuthSubmitting ? (
+                  <>
+                    <FaSpinner className="animate-spin" />
+                    <span>Creating Account...</span>
+                  </>
+                ) : (
+                  'Create Account'
+                )}
+              </button>
+            </form>
+          )}
+
+          {/* Divider */}
+          <div className="flex items-center my-6">
+            <div className="flex-1 border-t border-gray-300"></div>
+            <span className="px-4 text-sm text-gray-500">or</span>
+            <div className="flex-1 border-t border-gray-300"></div>
+          </div>
+
+          {/* Google Sign In Button */}
+          <GoogleSignInButton
+            onSuccess={handleGoogleAuth}
+            onError={(error) => {
+              toast.error(error.message || 'Google authentication was cancelled or failed');
+              setIsGoogleLoading(false);
+            }}
+            text={isLoginMode ? "Login with Google" : "Sign up with Google"}
+            disabled={isGoogleLoading || isAuthSubmitting}
+          />
+
+          {/* Toggle between Login and Register */}
+          <div className="text-center mt-6">
+            <button
+              type="button"
+              onClick={() => {
+                setIsLoginMode(!isLoginMode);
+                setAuthErrors({});
+              }}
+              className="text-sm text-gray-600 hover:text-gray-800 font-medium"
+            >
+              {isLoginMode ? (
+                <>Don't have an account? <span className="text-gray-800 font-semibold">Register</span></>
+              ) : (
+                <>Already have an account? <span className="text-gray-800 font-semibold">Login</span></>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Donor Type Selection Screen
+  if (currentStep === 'donor-type-selection') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-2xl p-8">
+          <div className="text-center mb-8">
+            <div className="flex items-center justify-center mb-4">
+              <img src={abuLogo} alt="ABU Logo" className="h-16 w-auto" />
+              <div className="flex flex-col justify-center ml-3 h-16 text-left">
+                <span className="text-sm font-bold leading-tight text-gray-800" style={{lineHeight: '1.1'}}>ABU Endowment</span>
+                <span className="text-xs font-bold text-gray-800 leading-none">& Crowd Funding</span>
+              </div>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Select Your Type</h2>
+            <p className="text-gray-600">Please select whether you are an ABU Alumni or a Supporter</p>
+          </div>
+
+          <div className="space-y-4 mb-6">
+            <button
+              onClick={() => handleDonorTypeSelection('Alumni')}
+              className="w-full p-6 bg-gradient-to-r from-gray-600 to-gray-700 text-white rounded-xl font-semibold hover:from-gray-700 hover:to-gray-800 transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-3"
+            >
+              <FaGraduationCap className="text-2xl" />
+              <span className="text-lg">I'm an ABU Alumni</span>
+            </button>
+
+            <button
+              onClick={() => handleDonorTypeSelection('Individual')}
+              className="w-full p-6 bg-gradient-to-r from-gray-600 to-gray-700 text-white rounded-xl font-semibold hover:from-gray-700 hover:to-gray-800 transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-3"
+            >
+              <FaHandHoldingHeart className="text-2xl" />
+              <span className="text-lg">I'm a Supporter</span>
+            </button>
+          </div>
+
+          {/* Divider */}
+          <div className="flex items-center my-6">
+            <div className="flex-1 border-t border-gray-300"></div>
+            <span className="px-4 text-sm text-gray-500">or</span>
+            <div className="flex-1 border-t border-gray-300"></div>
+          </div>
+
+          {/* Google Sign Up Button */}
+          <GoogleSignInButton
+            onSuccess={handleGoogleAuth}
+            onError={(error) => {
+              toast.error(error.message || 'Google sign up was cancelled or failed');
+              setIsGoogleLoading(false);
+            }}
+            text="Sign up with Google"
+            disabled={isGoogleLoading}
+          />
         </div>
       </div>
     );
@@ -569,16 +1079,6 @@ const Donations = () => {
             >
               Not an alumni? Register here
             </button>
-            
-            {/* Temporary debug button */}
-            <div className="pt-2">
-              <button
-                onClick={() => setCurrentStep('donation')}
-                className="text-gray-500 hover:text-gray-700 text-sm"
-              >
-                🐛 Debug: Go to Donation Form
-              </button>
-            </div>
           </div>
         </div>
       </div>
@@ -779,6 +1279,14 @@ const Donations = () => {
           )}
 
           <div className="text-center mb-8">
+            {user && (user.name || user.surname) && (
+              <p className="text-lg text-gray-700 mb-4">
+                {[user.name, user.surname].filter(Boolean).join(' ') || user.email}, you are about to donate to{' '}
+                <span className="font-bold text-gray-900">
+                  {selectedProject ? selectedProject.project_title : 'the Endowment Fund'}
+                </span>
+              </p>
+            )}
             <h1 className="text-3xl font-bold text-gray-900 mb-4">
               Thank you for contributing to {selectedProject ? selectedProject.project_title : 'the Endowment Fund'}!
             </h1>
@@ -825,78 +1333,6 @@ const Donations = () => {
           )}
 
           <form onSubmit={alumniData ? handleAlumniUpdate : handlePaymentSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  First Name *
-                </label>
-                <input
-                  type="text"
-                  value={donationData.name || ''}
-                  onChange={(e) => setDonationData({...donationData, name: e.target.value})}
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter your first name"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Surname *
-                </label>
-                <input
-                  type="text"
-                  value={donationData.surname || ''}
-                  onChange={(e) => setDonationData({...donationData, surname: e.target.value})}
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter your surname"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Other Name
-                </label>
-                <input
-                  type="text"
-                  value={donationData.other_name || ''}
-                  onChange={(e) => setDonationData({...donationData, other_name: e.target.value})}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter other name (optional)"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email Address *
-                </label>
-                <input
-                  type="email"
-                  value={donationData.email || ''}
-                  onChange={(e) => setDonationData({...donationData, email: e.target.value})}
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter your email address"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Phone Number *
-                </label>
-                <input
-                  type="tel"
-                  value={donationData.phone || ''}
-                  onChange={(e) => setDonationData({...donationData, phone: e.target.value})}
-                  required
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter your phone number"
-                />
-              </div>
-            </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -930,23 +1366,6 @@ const Donations = () => {
             <p>Your donation will be processed securely through Paystack</p>
           </div>
 
-          {/* Debug Button */}
-          <div className="mt-8 pt-6 border-t border-gray-200">
-            <button
-              onClick={() => setShowDebug(!showDebug)}
-              className="flex items-center gap-2 mx-auto px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm"
-            >
-              <FaBug className="w-4 h-4" />
-              {showDebug ? 'Hide Debug Tools' : 'Show Debug Tools'}
-            </button>
-          </div>
-
-          {/* Debug Tools */}
-          {showDebug && (
-            <div className="mt-6">
-              <BackendTest />
-            </div>
-          )}
         </div>
       </div>
     </div>

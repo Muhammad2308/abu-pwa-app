@@ -46,15 +46,28 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      const currentPath = window.location.pathname;
+      // Don't redirect if already on auth pages or if it's a session check endpoint
+      const isAuthPage = currentPath.includes('/login') || currentPath.includes('/register') || currentPath.includes('/forgot-password') || currentPath.includes('/reset-password');
+      const isSessionCheck = error.config?.url?.includes('/donor-sessions/me') || error.config?.url?.includes('/check-device');
+      // Don't redirect for notification or alumni list fetches - these are non-critical
+      const isNonCriticalFetch = error.config?.url?.includes('/messages') || error.config?.url?.includes('/donors');
+      
       // Clear all auth-related storage
       localStorage.removeItem('auth_token');
       localStorage.removeItem('device_session');
       localStorage.removeItem('donor_session_id');
       localStorage.removeItem('donor_username');
       localStorage.removeItem('user');
-      // Only redirect if not already on login/register page
-      if (!window.location.pathname.includes('/login') && !window.location.pathname.includes('/register')) {
-        window.location.href = '/login';
+      
+      // Only redirect if not already on auth pages, not a session check, and not a non-critical fetch
+      if (!isAuthPage && !isSessionCheck && !isNonCriticalFetch) {
+        // Use a small delay to prevent redirect loops
+        setTimeout(() => {
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login';
+          }
+        }, 100);
       }
     }
     return Promise.reject(error);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
@@ -11,6 +11,7 @@ const Login = () => {
   const location = useLocation();
   const { login, googleLogin, isAuthenticated, loading, user, isDeviceRecognized, hasDonorSession } = useAuth();
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const hasRedirected = useRef(false);
 
   const [formData, setFormData] = useState({
     email: '',
@@ -19,13 +20,18 @@ const Login = () => {
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated (but only once, prevent loops)
   useEffect(() => {
-    if (!loading && isAuthenticated) {
-      const redirectTo = location.state?.from?.pathname || '/';
-      navigate(redirectTo, { replace: true });
+    if (!loading && isAuthenticated && user && !hasRedirected.current) {
+      hasRedirected.current = true;
+      // Small delay to ensure state is stable
+      const timer = setTimeout(() => {
+        const redirectTo = location.state?.from?.pathname || '/';
+        navigate(redirectTo, { replace: true });
+      }, 200);
+      return () => clearTimeout(timer);
     }
-  }, [isAuthenticated, loading, navigate, location]);
+  }, [isAuthenticated, loading, user, navigate, location]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -79,8 +85,11 @@ const Login = () => {
 
       if (result.success) {
         toast.success(result.message || 'Login successful!');
-        const redirectTo = location.state?.from?.pathname || '/';
-        navigate(redirectTo, { replace: true });
+        // Small delay to ensure state is fully updated
+        setTimeout(() => {
+          const redirectTo = location.state?.from?.pathname || '/';
+          navigate(redirectTo, { replace: true });
+        }, 200);
       } else {
         // Show error message - if it's a Google account error, show it prominently
         const errorMsg = result.message || 'Login failed';
@@ -112,11 +121,11 @@ const Login = () => {
       const result = await googleLogin(idToken);
       if (result.success) {
         toast.success(result.message || 'Google login successful!');
-        // Small delay to ensure state is updated before navigation
+        // Wait for state to be fully updated before navigation
         setTimeout(() => {
           const redirectTo = location.state?.from?.pathname || '/';
           navigate(redirectTo, { replace: true });
-        }, 100);
+        }, 300);
       } else {
         // Show detailed error message
         const errorMsg = result.message || 'Google login failed';

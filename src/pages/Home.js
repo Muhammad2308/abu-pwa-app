@@ -83,10 +83,27 @@ const Home = () => {
     }
   }, [showHistoryModal, user, isDeviceRecognized, thankYou]);
 
-  // Fetch alumni list
+  // Fetch alumni list (only if authenticated)
   useEffect(() => {
-    fetchAlumniList();
-  }, []);
+    let abortController = new AbortController();
+    let timeoutId;
+    
+    if (isAuthenticated) {
+      // Add a small delay to ensure session is fully established
+      timeoutId = setTimeout(() => {
+        fetchAlumniList(abortController);
+      }, 500);
+    } else {
+      setAlumniList([]);
+      setFilteredAlumni([]);
+    }
+    
+    // Cleanup: abort request if component unmounts or dependencies change
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      abortController.abort();
+    };
+  }, [isAuthenticated]);
 
   // Filter alumni based on search query
   useEffect(() => {
@@ -103,20 +120,39 @@ const Home = () => {
     }
   }, [searchQuery, alumniList]);
 
-  const fetchAlumniList = async () => {
+  const fetchAlumniList = async (abortController) => {
     setAlumniLoading(true);
     try {
-      const response = await api.get('/api/donors');
+      const response = await api.get('/api/donors', {
+        signal: abortController?.signal
+      });
       const alumni = Array.isArray(response.data) ? response.data : response.data?.data || response.data?.donors || [];
       // Filter to show only alumni with email
       const alumniWithEmail = alumni.filter(a => a.email && a.email.trim() !== '');
       setAlumniList(alumniWithEmail);
       setFilteredAlumni(alumniWithEmail);
     } catch (error) {
+      // Ignore aborted requests (component unmounted or navigation)
+      if (error.code === 'ECONNABORTED' || error.name === 'AbortError' || error.message === 'Request aborted') {
+        return; // Silently ignore aborted requests
+      }
+      
       console.error('Error fetching alumni list:', error);
-      toast.error('Failed to load alumni list');
-      setAlumniList([]);
-      setFilteredAlumni([]);
+      
+      // Handle 401 (Unauthorized) - user needs to login
+      if (error.response?.status === 401) {
+        // Don't show error toast, just set empty list
+        // The UI will show appropriate message
+        setAlumniList([]);
+        setFilteredAlumni([]);
+      } else {
+        // For other errors, show toast only if user is authenticated
+        if (isAuthenticated) {
+          toast.error('Failed to load alumni list. Please try again later.');
+        }
+        setAlumniList([]);
+        setFilteredAlumni([]);
+      }
     } finally {
       setAlumniLoading(false);
     }
@@ -454,14 +490,14 @@ const Home = () => {
     <div className="space-y-6 pt-4 pb-20">
       {/* OPay-Style Balance Card - Always visible */}
       <div className="mx-4">
-        <div className="bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 rounded-2xl shadow-2xl p-6 text-white relative overflow-hidden w-full">
+        <div className="bg-gradient-to-br from-gray-600 via-gray-700 to-gray-800 rounded-2xl shadow-2xl p-5 text-white relative overflow-hidden w-full">
           {/* Decorative elements */}
           <div className="absolute top-0 right-0 w-40 h-40 bg-white opacity-5 rounded-full -mr-20 -mt-20"></div>
           <div className="absolute bottom-0 left-0 w-32 h-32 bg-white opacity-5 rounded-full -ml-16 -mb-16"></div>
           
           <div className="relative z-10">
             {/* Top Section */}
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-4">
               {/* Left: My Donations */}
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium opacity-90">My Donations</span>
@@ -495,13 +531,13 @@ const Home = () => {
             </div>
 
             {/* Balance Amount */}
-            <div className="flex items-center gap-2 mb-4">
+            <div className="flex items-center gap-2 mb-3">
               <div className="text-3xl font-bold">{formatNaira(user && isDeviceRecognized ? totalDonated : 0)}</div>
               <FaChevronRight className="w-4 h-4 opacity-75" />
             </div>
 
             {/* Progress Bar - Inside Card - Always visible */}
-            <div className="w-full mb-6">
+            <div className="w-full mb-4">
               <div className="flex h-2.5 rounded-full overflow-hidden bg-white bg-opacity-20 border border-white border-opacity-30 shadow-inner">
                 {/* Tier 1: 1 - 100,000 */}
                 <div className={`flex-1 transition-colors duration-300 ${
@@ -657,7 +693,7 @@ const Home = () => {
                             <div className={`w-2 h-2 rounded-full ${
                               isCompleted ? 'bg-green-500' : 
                               isUrgent ? 'bg-red-500 animate-pulse' : 
-                              'bg-blue-500 animate-pulse'
+                              'bg-gray-500 animate-pulse'
                             }`}></div>
                             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Progress</span>
                           </div>
@@ -678,7 +714,7 @@ const Home = () => {
                             className={`h-full rounded-full transition-all duration-500 relative overflow-hidden shadow-sm ${
                               isCompleted 
                                 ? 'bg-gradient-to-r from-green-500 via-green-600 to-emerald-600' 
-                                : 'bg-gradient-to-r from-blue-500 via-blue-600 to-purple-600'
+                                : 'bg-gradient-to-r from-gray-500 via-gray-600 to-gray-700'
                             }`}
                             style={{ width: `${Math.max(progressPercentage, 2)}%` }}
                           >
@@ -704,13 +740,13 @@ const Home = () => {
                       {/* CTA Button */}
                       <button
                         onClick={() => window.location.href = `/donations?project=${encodeURIComponent(project.project_title)}`}
-                        className="w-full bg-gradient-to-r from-blue-600 via-blue-700 to-purple-600 text-white py-3.5 px-6 rounded-xl font-bold text-sm shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2 group/btn relative overflow-hidden"
+                        className="w-full bg-gradient-to-r from-gray-600 via-gray-700 to-gray-800 text-white py-3.5 px-6 rounded-xl font-bold text-sm shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2 group/btn relative overflow-hidden"
                       >
                         <span className="relative z-10 flex items-center gap-2">
                           <FaHandHoldingHeart className="text-base group-hover/btn:scale-110 transition-transform" />
                           <span>Support This Project</span>
                         </span>
-                        <div className="absolute inset-0 bg-gradient-to-r from-purple-600 via-blue-700 to-blue-600 opacity-0 group-hover/btn:opacity-100 transition-opacity duration-300"></div>
+                        <div className="absolute inset-0 bg-gradient-to-r from-gray-700 via-gray-800 to-gray-900 opacity-0 group-hover/btn:opacity-100 transition-opacity duration-300"></div>
                       </button>
 
                       {/* Impact Message */}
@@ -745,7 +781,7 @@ const Home = () => {
               className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 transition-all transform hover:scale-105 shadow-lg"
             >
               <FaEnvelope className="text-base" />
-              <span>Compose Email</span>
+              <span>Compose</span>
             </button>
           </div>
 
@@ -769,6 +805,20 @@ const Home = () => {
           <div className="text-center py-12">
             <FaSpinner className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
             <p className="text-gray-500 font-medium">Loading alumni...</p>
+          </div>
+        ) : !isAuthenticated ? (
+          <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
+            <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full flex items-center justify-center">
+              <FaUserFriends className="text-3xl text-blue-600" />
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Login Required</h3>
+            <p className="text-gray-600 mb-6">Please login to view and connect with alumni</p>
+            <button
+              onClick={() => navigate('/login')}
+              className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-3 rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all transform hover:scale-105 shadow-lg font-semibold"
+            >
+              Login Now
+            </button>
           </div>
         ) : filteredAlumni.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-lg p-12 text-center">

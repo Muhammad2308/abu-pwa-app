@@ -25,6 +25,7 @@ export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [deviceSessionId, setDeviceSessionId] = useState(null);
   const [hasDonorSession, setHasDonorSession] = useState(false);
+  const [logoutLoading, setLogoutLoading] = useState(false);
 
   // Check session on app load (priority: donor session > device recognition)
   useEffect(() => {
@@ -60,6 +61,7 @@ export const AuthProvider = ({ children }) => {
           if (sessionData.device_session_id) {
             setDeviceSessionId(sessionData.device_session_id);
           }
+          setLoading(false); // Set loading to false on success
         } else {
           // Session invalid, clear storage
           clearDonorSession();
@@ -72,11 +74,16 @@ export const AuthProvider = ({ children }) => {
       }
     } catch (error) {
       console.error('Session check error:', error);
-      // Session invalid or expired, clear storage and check device
-      clearDonorSession();
-      await checkDeviceAndDonorSession();
-    } finally {
-      setLoading(false);
+      // Only clear session if it's a 401 (unauthorized), not for other errors
+      if (error.response?.status === 401) {
+        // Session invalid or expired, clear storage and check device
+        clearDonorSession();
+        await checkDeviceAndDonorSession();
+      } else {
+        // For other errors (network, etc.), don't clear session - might be temporary
+        // Just set loading to false and keep current state
+        setLoading(false);
+      }
     }
   };
 
@@ -110,10 +117,16 @@ export const AuthProvider = ({ children }) => {
         setHasDonorSession(false);
         setDeviceSessionId(null);
       }
+      setLoading(false); // Always set loading to false after check
     } catch (error) {
       console.error('Device and session check error:', error);
       // Fallback to old device check endpoint
-      await checkDeviceRecognition();
+      try {
+        await checkDeviceRecognition();
+      } catch (fallbackError) {
+        console.error('Fallback device check also failed:', fallbackError);
+        setLoading(false); // Ensure loading is set to false even if fallback fails
+      }
     }
   };
 
@@ -133,11 +146,13 @@ export const AuthProvider = ({ children }) => {
         setIsDeviceRecognized(false);
         setHasDonorSession(false);
       }
+      setLoading(false); // Always set loading to false after check
     } catch (error) {
       console.error('Device recognition error:', error);
       setUser(null);
       setIsDeviceRecognized(false);
       setHasDonorSession(false);
+      setLoading(false); // Set loading to false even on error
     }
   };
 
@@ -285,7 +300,11 @@ export const AuthProvider = ({ children }) => {
 
   // Logout from donor session
   const logout = async () => {
+    setLogoutLoading(true);
     try {
+      // Add a small delay for better UX
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       // Call logout API if session exists
       if (sessionId) {
         await donorSessionsAPI.logout();
@@ -301,6 +320,7 @@ export const AuthProvider = ({ children }) => {
       setIsDeviceRecognized(false);
       setDeviceSessionId(null);
       setHasDonorSession(false);
+      setLogoutLoading(false);
     }
   };
 
@@ -766,6 +786,7 @@ export const AuthProvider = ({ children }) => {
     register,
     login,
     logout,
+    logoutLoading,
     checkSession,
     checkDeviceAndDonorSession,
     // Google OAuth methods

@@ -3,7 +3,7 @@ import { Toaster } from 'react-hot-toast';
 import Sidebar from './BottomNavigation';
 import abuLogo from '../assets/abu_logo.png'; // Import the logo
 import { useNavigate, useLocation } from 'react-router-dom';
-import { FaHeart, FaHandHoldingHeart, FaBars, FaChevronDown, FaUser, FaEdit, FaSignOutAlt, FaCog, FaBell, FaTimes } from 'react-icons/fa';
+import { FaHeart, FaHandHoldingHeart, FaBars, FaChevronDown, FaUser, FaEdit, FaSignOutAlt, FaCog, FaBell, FaTimes, FaSpinner } from 'react-icons/fa';
 import { useAuth } from '../contexts/AuthContext';
 import UserProfileModal from './UserProfileModal';
 import toast from 'react-hot-toast';
@@ -12,7 +12,7 @@ import api, { getBaseUrl } from '../services/api';
 const Layout = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, isAuthenticated, logout, checkSession, checkDeviceRecognition } = useAuth();
+  const { user, isAuthenticated, logout, logoutLoading, checkSession, checkDeviceRecognition } = useAuth();
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -37,11 +37,13 @@ const Layout = ({ children }) => {
   };
 
   const handleLogout = async () => {
-    if (window.confirm('Are you sure you want to logout? Another user can then login on this device.')) {
-      await logout();
-      toast.success('Logged out successfully. You can now login with a different account.');
+    setShowUserDropdown(false);
+    await logout();
+    toast.success('Logged out successfully. You can now login with a different account.');
+    // Small delay before navigation to ensure state is cleared
+    setTimeout(() => {
       navigate('/login', { replace: true });
-    }
+    }, 300);
   };
 
   const handleSettings = () => {
@@ -59,15 +61,27 @@ const Layout = ({ children }) => {
     }
   };
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = async (abortController) => {
     if (!isAuthenticated || !user) return;
     setNotificationsLoading(true);
     setNotificationsError(null);
     try {
-      const response = await api.get(`/api/donor/${user.id}/messages`);
+      const response = await api.get(`/api/donor/${user.id}/messages`, {
+        signal: abortController?.signal
+      });
       const data = Array.isArray(response.data) ? response.data : response.data?.messages || [];
       setNotifications(data);
     } catch (error) {
+      // Ignore aborted requests (component unmounted or navigation)
+      if (error.code === 'ECONNABORTED' || error.name === 'AbortError' || error.message === 'Request aborted') {
+        return; // Silently ignore aborted requests
+      }
+      // Ignore 401 errors - user might not be fully authenticated yet, don't trigger redirect
+      if (error.response?.status === 401) {
+        console.log('Notification fetch: User not authenticated yet, skipping...');
+        setNotifications([]);
+        return;
+      }
       console.error('Notification fetch error:', error);
       setNotificationsError('Unable to load messages right now.');
     } finally {
@@ -76,11 +90,24 @@ const Layout = ({ children }) => {
   };
 
   useEffect(() => {
+    // Add a small delay to ensure session is fully established
+    let abortController = new AbortController();
+    let timeoutId;
+    
     if (isAuthenticated && user) {
-      fetchNotifications();
+      // Wait a bit for session to be fully established before fetching
+      timeoutId = setTimeout(() => {
+        fetchNotifications(abortController);
+      }, 500);
     } else {
       setNotifications([]);
     }
+    
+    // Cleanup: abort request if component unmounts or dependencies change
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      abortController.abort();
+    };
   }, [isAuthenticated, user]);
 
   // Close dropdowns when clicking outside
@@ -142,11 +169,11 @@ const Layout = ({ children }) => {
               <div className="relative" ref={notificationsDropdownRef}>
                 <button
                   onClick={() => setShowNotificationsDropdown(!showNotificationsDropdown)}
-                  className="relative flex items-center justify-center w-10 h-10 rounded-full bg-blue-50 hover:bg-blue-100 transition-all duration-150"
+                  className="relative flex items-center justify-center w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 transition-all duration-150"
                   aria-label="Notifications"
                   title="Notifications"
                 >
-                  <FaBell className="w-4 h-4 text-blue-600" />
+                  <FaBell className="w-4 h-4 text-gray-600" />
                   {notifications.length > 0 && (
                     <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold bg-red-500 text-white flex items-center justify-center">
                       {notifications.length > 9 ? '9+' : notifications.length}
@@ -162,7 +189,7 @@ const Layout = ({ children }) => {
                       </div>
                       <button
                         onClick={fetchNotifications}
-                        className="text-xs text-blue-600 hover:text-blue-700 font-semibold"
+                        className="text-xs text-gray-600 hover:text-gray-700 font-semibold"
                       >
                         Refresh
                       </button>
@@ -271,14 +298,21 @@ const Layout = ({ children }) => {
                       <span>Settings</span>
                     </button>
                     <button
-                      onClick={() => {
-                        setShowUserDropdown(false);
-                        handleLogout();
-                      }}
-                      className="w-full px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors border-t border-gray-200"
+                      onClick={handleLogout}
+                      disabled={logoutLoading}
+                      className="w-full px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-3 transition-colors border-t border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <FaSignOutAlt className="text-base" />
-                      <span>Logout</span>
+                      {logoutLoading ? (
+                        <>
+                          <FaSpinner className="text-base animate-spin" />
+                          <span>Logging out...</span>
+                        </>
+                      ) : (
+                        <>
+                          <FaSignOutAlt className="text-base" />
+                          <span>Logout</span>
+                        </>
+                      )}
                     </button>
                   </>
                 </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
@@ -9,16 +9,22 @@ import { GoogleSignInButton } from '../hooks/useGoogleAuth';
 
 const Register = () => {
   const navigate = useNavigate();
-  const { register, googleRegister, isAuthenticated, loading } = useAuth();
+  const { register, googleRegister, googleLogin, isAuthenticated, loading, user } = useAuth();
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const hasRedirected = useRef(false);
 
-  // Redirect if already authenticated (similar to Login.js)
+  // Redirect if already authenticated (but only once, prevent loops)
   useEffect(() => {
-    if (!loading && isAuthenticated) {
-      console.log('Register: User is authenticated, redirecting to home...');
-      navigate('/', { replace: true });
+    if (!loading && isAuthenticated && user && !hasRedirected.current) {
+      hasRedirected.current = true;
+      // Small delay to ensure state is stable
+      const timer = setTimeout(() => {
+        console.log('Register: User is authenticated, redirecting to home...');
+        navigate('/', { replace: true });
+      }, 200);
+      return () => clearTimeout(timer);
     }
-  }, [isAuthenticated, loading, navigate]);
+  }, [isAuthenticated, loading, user, navigate]);
 
   const [step, setStep] = useState('register'); // 'search', 'found', 'register' - default to 'register' for simplified flow
   const [searchData, setSearchData] = useState({
@@ -126,13 +132,6 @@ const Register = () => {
     fetchDepartments();
   }, [formData.entry_year, formData.faculty_id, formData.donor_type]);
 
-  // Redirect if already authenticated
-  useEffect(() => {
-    if (!loading && isAuthenticated) {
-      navigate('/', { replace: true });
-    }
-  }, [isAuthenticated, loading, navigate]);
-
   const handleSearchChange = (e) => {
     const { name, value } = e.target;
     setSearchData(prev => ({
@@ -195,7 +194,7 @@ const Register = () => {
         } else if (searchData.searchType === 'phone') {
           setFormData(prev => ({ ...prev, phone: searchData.searchValue.trim() }));
         }
-        toast.info('Donor not found. Please complete registration with your details.');
+        toast('Donor not found. Please complete registration with your details.', { icon: 'ℹ️' });
       }
     } catch (error) {
       console.error('Search error:', error);
@@ -206,7 +205,7 @@ const Register = () => {
       } else if (searchData.searchType === 'phone') {
         setFormData(prev => ({ ...prev, phone: searchData.searchValue.trim() }));
       }
-      toast.info('Donor not found. Please complete registration with your details.');
+      toast('Donor not found. Please complete registration with your details.', { icon: 'ℹ️' });
     } finally {
       setIsSearching(false);
     }
@@ -504,52 +503,70 @@ const Register = () => {
         toast.success(result.message || 'Google registration successful!');
         console.log('Registration successful, navigating to home...');
         
-        // Wait a bit longer to ensure state is fully updated, then navigate
+        // Wait for state to be fully updated, then navigate
         setTimeout(() => {
           console.log('Navigating to home page...');
-          // Try React Router navigation first
           navigate('/', { replace: true });
-          // Fallback: Force navigation if React Router doesn't work
-          setTimeout(() => {
-            if (window.location.pathname !== '/') {
-              console.log('React Router navigation failed, using window.location...');
-              window.location.href = '/';
-            }
-          }, 200);
-        }, 500);
+        }, 300);
       } else {
-        // Show detailed error message
-        const errorMsg = result.message || 'Google registration failed';
-        
-        // Show more helpful error messages
-        if (errorMsg.includes('email') && errorMsg.includes('verified')) {
-          toast.error('Please verify your Google email first, then try again.', { 
-            duration: 8000,
-            icon: '📧',
-          });
-        } else if (errorMsg.includes('expired')) {
-          toast.error('Google sign-in expired. Please try again.', { 
-            duration: 6000,
-            icon: '⏰',
-          });
-        } else if (errorMsg.includes('Invalid') || errorMsg.includes('token')) {
-          toast.error('Google sign-in failed. Please try signing in with Google again.', { 
-            duration: 6000,
-            icon: '🔐',
-          });
-        } else {
-          toast.error(errorMsg, { duration: 6000 });
-        }
-        
-        console.error('Registration failed:', errorMsg, result.error);
-        
-        // If it's a 409 (account exists), offer to redirect to login
+        // Check if it's a 409 (account already exists) - automatically try login instead
         if (result.error?.response?.status === 409) {
-          setTimeout(() => {
-            if (window.confirm('This account already exists. Would you like to login instead?')) {
-              navigate('/login', { replace: true });
+          console.log('Account already exists, attempting automatic login...');
+          toast('Account already exists. Logging you in...', { 
+            duration: 3000,
+            icon: 'ℹ️'
+          });
+          
+          // Try to login with the same Google token
+          try {
+            const loginResult = await googleLogin(idToken);
+            
+            if (loginResult.success) {
+              toast.success('Successfully logged in!');
+              // Wait a bit longer to ensure state is fully updated before navigation
+              setTimeout(() => {
+                // Force navigation to home
+                window.location.href = '/';
+              }, 800);
+            } else {
+              // If login also fails, redirect to login page
+              toast.error(loginResult.message || 'Please login manually');
+              setTimeout(() => {
+                navigate('/login', { replace: true });
+              }, 2000);
             }
-          }, 2000);
+          } catch (loginError) {
+            console.error('Auto-login failed:', loginError);
+            toast.error('Please login manually');
+            setTimeout(() => {
+              navigate('/login', { replace: true });
+            }, 2000);
+          }
+        } else {
+          // Show detailed error message for other errors
+          const errorMsg = result.message || 'Google registration failed';
+          
+          // Show more helpful error messages
+          if (errorMsg.includes('email') && errorMsg.includes('verified')) {
+            toast.error('Please verify your Google email first, then try again.', { 
+              duration: 8000,
+              icon: '📧',
+            });
+          } else if (errorMsg.includes('expired')) {
+            toast.error('Google sign-in expired. Please try again.', { 
+              duration: 6000,
+              icon: '⏰',
+            });
+          } else if (errorMsg.includes('Invalid') || errorMsg.includes('token')) {
+            toast.error('Google sign-in failed. Please try signing in with Google again.', { 
+              duration: 6000,
+              icon: '🔐',
+            });
+          } else {
+            toast.error(errorMsg, { duration: 6000 });
+          }
+          
+          console.error('Registration failed:', errorMsg, result.error);
         }
         
         // If it's a 401, suggest trying again
