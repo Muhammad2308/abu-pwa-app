@@ -19,6 +19,7 @@ const Login = () => {
   });
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   // Redirect if already authenticated (but only once, prevent loops)
   useEffect(() => {
@@ -85,6 +86,7 @@ const Login = () => {
 
       if (result.success) {
         toast.success(result.message || 'Login successful!');
+        setIsRedirecting(true);
         // Small delay to ensure state is fully updated
         setTimeout(() => {
           const redirectTo = location.state?.from?.pathname || '/';
@@ -121,6 +123,7 @@ const Login = () => {
       const result = await googleLogin(idToken);
       if (result.success) {
         toast.success(result.message || 'Google login successful!');
+        setIsRedirecting(true);
         // Wait for state to be fully updated before navigation
         setTimeout(() => {
           const redirectTo = location.state?.from?.pathname || '/';
@@ -140,12 +143,12 @@ const Login = () => {
     }
   };
 
-  if (loading) {
+  if (loading || isRedirecting) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center p-4">
         <div className="text-center">
           <FaSpinner className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">Loading...</p>
+          <p className="text-gray-600">{isRedirecting ? 'Redirecting...' : 'Loading...'}</p>
         </div>
       </div>
     );

@@ -53,24 +53,53 @@ const Home = () => {
   // Get location state for thank you message - must be declared early
   const location = useLocation();
   const navigate = useNavigate();
-  const thankYou = location.state?.thankYou;
+  // Get thankYou from location state OR sessionStorage (for Paystack redirect)
+  const [thankYou, setThankYou] = useState(() => {
+    // First check location state
+    if (location.state?.thankYou) {
+      return location.state.thankYou;
+    }
+    // Then check sessionStorage (for Paystack redirect)
+    const stored = sessionStorage.getItem('donationThankYou');
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        sessionStorage.removeItem('donationThankYou'); // Clear after reading
+        return parsed;
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  });
 
   // Fetch donation history when history modal opens
   useEffect(() => {
-    if (showHistoryModal && user && isDeviceRecognized) {
+    if (showHistoryModal && isAuthenticated && user) {
       setHistoryLoading(true);
       setHistoryError(null);
       donationsAPI.getHistory()
         .then(res => {
-          const donations = res.data.donations || res.data || [];
+          const allDonations = res.data.donations || res.data || [];
+          
+          // Filter donations to only show the authenticated user's donations
+          const userDonations = allDonations.filter(donation => {
+            // Check if donation belongs to the authenticated user
+            return donation.donor_id === user.id || donation.donor?.id === user.id;
+          });
+          
           // Sort by most recent first
-          const sorted = donations.sort((a, b) => {
+          const sorted = userDonations.sort((a, b) => {
             return new Date(b.created_at || b.createdAt || b.date) - new Date(a.created_at || a.createdAt || a.date);
           });
           setDonationHistory(sorted);
           
-          // Also update total donated from history
-          const sum = sorted.reduce((acc, d) => acc + Number(d.amount || 0), 0);
+          // Also update total donated from history (only user's donations)
+          // Check both 'amount' and 'type' fields as the database might have them swapped
+          const sum = sorted.reduce((acc, d) => {
+            const amount = d.amount || d.type || 0;
+            return acc + Number(amount || 0);
+          }, 0);
           setTotalDonated(sum);
           
           setHistoryLoading(false);
@@ -81,7 +110,7 @@ const Home = () => {
           console.error('Donation history error:', err);
         });
     }
-  }, [showHistoryModal, user, isDeviceRecognized, thankYou]);
+  }, [showHistoryModal, isAuthenticated, user, thankYou]);
 
   // Fetch alumni list (only if authenticated)
   useEffect(() => {
@@ -332,11 +361,26 @@ const Home = () => {
       );
       
       // Refresh donations history to update total
-      if (user && isDeviceRecognized) {
+      if (isAuthenticated && user) {
         const cacheKey = `abu_totalDonated_${user.id}`;
         donationsAPI.getHistory().then(res => {
-          const donations = res.data.donations || [];
-          const sum = donations.reduce((acc, d) => acc + Number(d.amount || 0), 0);
+          const allDonations = res.data.donations || [];
+          
+          // Filter donations to only show the authenticated user's donations
+          // Include ALL donations (endowment and projects) for this user
+          const userDonations = allDonations.filter(donation => {
+            const donorId = donation.donor_id || donation.donor?.id || donation.donor_id;
+            return donorId === user.id;
+          });
+          
+          // Calculate sum from user's donations only
+          // Check both 'amount' and 'type' fields as the database might have them swapped
+          const sum = userDonations.reduce((acc, d) => {
+            const amount = d.amount || d.type || 0;
+            return acc + Number(amount || 0);
+          }, 0);
+          
+          console.log('Thank you - Total updated:', { sum, userDonations: userDonations.length });
           setTotalDonated(sum);
           localStorage.setItem(cacheKey, sum);
         }).catch(() => {
@@ -344,10 +388,25 @@ const Home = () => {
         });
       }
       
+      // Refresh projects list to show updated raised amounts
+      // Clear cache and refetch projects after a short delay to allow backend to update
+      setTimeout(() => {
+        localStorage.removeItem('abu_projects');
+        api.get('/api/projects')
+          .then(res => {
+            const activeProjects = res.data.filter(project => project.deleted_at === null || project.deleted_at === undefined);
+            setProjects(activeProjects);
+            localStorage.setItem('abu_projects', JSON.stringify(activeProjects));
+          })
+          .catch(() => {
+            // Silent fail - don't show error
+          });
+      }, 2000); // 2 second delay to allow backend webhook to process
+      
       // Clear location state to prevent showing message again on refresh
       window.history.replaceState({}, document.title);
     }
-  }, [thankYou, user, isDeviceRecognized]);
+  }, [thankYou, isAuthenticated, user]);
 
   // On mount, try to load projects and totalDonated from localStorage
   useEffect(() => {
@@ -373,9 +432,9 @@ const Home = () => {
     }
   }, [projects]);
 
-  // For totalDonated, cache per user
+  // For totalDonated, cache per user - ONLY when authenticated
   useEffect(() => {
-    if (user && isDeviceRecognized) {
+    if (isAuthenticated && user) {
       const cacheKey = `abu_totalDonated_${user.id}`;
       const cachedTotal = localStorage.getItem(cacheKey);
       if (cachedTotal !== null) {
@@ -383,8 +442,35 @@ const Home = () => {
       }
       const fingerprint = getDeviceFingerprint();
       donationsAPI.getHistory().then(res => {
-        const donations = res.data.donations || [];
-        const sum = donations.reduce((acc, d) => acc + Number(d.amount || 0), 0);
+        const allDonations = res.data.donations || [];
+        
+        // Filter donations to only show the authenticated user's donations
+        // Include ALL donations (endowment and projects) for this user
+        const userDonations = allDonations.filter(donation => {
+          const donorId = donation.donor_id || donation.donor?.id || donation.donor_id;
+          return donorId === user.id;
+        });
+        
+        console.log('Total donations calculation:', {
+          allDonations: allDonations.length,
+          userDonations: userDonations.length,
+          userId: user.id,
+          donations: userDonations.map(d => ({
+            id: d.id,
+            donor_id: d.donor_id,
+            amount: d.amount,
+            type: d.type,
+            project_id: d.project_id
+          }))
+        });
+        
+        // Calculate sum from user's donations only
+        // Check both 'amount' and 'type' fields as the database might have them swapped
+        const sum = userDonations.reduce((acc, d) => {
+          const amount = d.amount || d.type || 0;
+          return acc + Number(amount || 0);
+        }, 0);
+        
         setTotalDonated(sum);
         localStorage.setItem(cacheKey, sum);
         setDebugInfo({ fingerprint, history: res.data });
@@ -393,10 +479,17 @@ const Home = () => {
         setDebugInfo({ fingerprint, history: err?.response?.data || err.message });
       });
     } else {
+      // User is not authenticated - clear total and cache
       setTotalDonated(0);
       setDebugInfo({ fingerprint: getDeviceFingerprint(), history: null });
+      // Clear all cached totals when logged out
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('abu_totalDonated_')) {
+          localStorage.removeItem(key);
+        }
+      });
     }
-  }, [user, isDeviceRecognized]);
+  }, [isAuthenticated, user]);
 
   // Fetch donor messages
   useEffect(() => {
@@ -422,7 +515,7 @@ const Home = () => {
     if (window.confirm('Are you sure you want to logout? Another user can then login on this device.')) {
       await logout();
       toast.success('Logged out successfully. You can now login with a different account.');
-      navigate('/login', { replace: true });
+      navigate('/', { replace: true });
     }
   };
 
@@ -442,15 +535,29 @@ const Home = () => {
     }
     
     // Refresh donation history if modal is open
-    if (showHistoryModal && user && isDeviceRecognized) {
+    if (showHistoryModal && isAuthenticated && user) {
       donationsAPI.getHistory()
         .then(res => {
-          const donations = res.data.donations || res.data || [];
-          const sorted = donations.sort((a, b) => {
+          const allDonations = res.data.donations || res.data || [];
+          
+          // Filter donations to only show the authenticated user's donations
+          // Include ALL donations (endowment and projects) for this user
+          const userDonations = allDonations.filter(donation => {
+            const donorId = donation.donor_id || donation.donor?.id || donation.donor_id;
+            return donorId === user.id;
+          });
+          
+          const sorted = userDonations.sort((a, b) => {
             return new Date(b.created_at || b.createdAt || b.date) - new Date(a.created_at || a.createdAt || a.date);
           });
           setDonationHistory(sorted);
-          const sum = sorted.reduce((acc, d) => acc + Number(d.amount || 0), 0);
+          
+          // Calculate sum from user's donations only
+          // Check both 'amount' and 'type' fields as the database might have them swapped
+          const sum = sorted.reduce((acc, d) => {
+            const amount = d.amount || d.type || 0;
+            return acc + Number(amount || 0);
+          }, 0);
           setTotalDonated(sum);
         })
         .catch(() => {
@@ -501,12 +608,12 @@ const Home = () => {
               {/* Left: My Donations */}
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium opacity-90">My Donations</span>
-                {user && isDeviceRecognized && <FaEye className="w-4 h-4 opacity-75" />}
+                {isAuthenticated && user && <FaEye className="w-4 h-4 opacity-75" />}
               </div>
               {/* Right: User Name and Transaction History */}
               <div className="flex items-center gap-3">
                 {/* User Name */}
-                {user && isDeviceRecognized && (user.name || user.surname) && (
+                {isAuthenticated && user && (user.name || user.surname) && (
                   <div className="text-right">
                     <p className="text-sm font-semibold text-white opacity-95">
                       {[user.name, user.surname].filter(Boolean).join(' ') || user.email}
@@ -516,7 +623,7 @@ const Home = () => {
                 {/* Transaction History - Always visible */}
                 <button
                   onClick={() => {
-                    if (user && isDeviceRecognized) {
+                    if (isAuthenticated && user) {
                       setShowHistoryModal(true);
                     } else {
                       toast.info('Please login to view your transaction history');
@@ -532,7 +639,7 @@ const Home = () => {
 
             {/* Balance Amount */}
             <div className="flex items-center gap-2 mb-3">
-              <div className="text-3xl font-bold">{formatNaira(user && isDeviceRecognized ? totalDonated : 0)}</div>
+              <div className="text-3xl font-bold">{formatNaira(isAuthenticated && user ? totalDonated : 0)}</div>
               <FaChevronRight className="w-4 h-4 opacity-75" />
             </div>
 
@@ -541,15 +648,15 @@ const Home = () => {
               <div className="flex h-2.5 rounded-full overflow-hidden bg-white bg-opacity-20 border border-white border-opacity-30 shadow-inner">
                 {/* Tier 1: 1 - 100,000 */}
                 <div className={`flex-1 transition-colors duration-300 ${
-                  (user && isDeviceRecognized && totalDonated >= 1) ? 'bg-white bg-opacity-40' : 'bg-white bg-opacity-10'
+                  (isAuthenticated && user && totalDonated >= 1) ? 'bg-white bg-opacity-40' : 'bg-white bg-opacity-10'
                 }`}></div>
                 {/* Tier 2: 100,000 - 999,999 */}
                 <div className={`flex-1 transition-colors duration-300 ${
-                  (user && isDeviceRecognized && totalDonated >= 100000) ? 'bg-orange-300 bg-opacity-80' : 'bg-white bg-opacity-10'
+                  (isAuthenticated && user && totalDonated >= 100000) ? 'bg-orange-300 bg-opacity-80' : 'bg-white bg-opacity-10'
                 }`}></div>
                 {/* Tier 3: 1,000,000+ */}
                 <div className={`flex-1 transition-colors duration-300 ${
-                  (user && isDeviceRecognized && totalDonated >= 1000000) ? 'bg-green-300 bg-opacity-90' : 'bg-white bg-opacity-10'
+                  (isAuthenticated && user && totalDonated >= 1000000) ? 'bg-green-300 bg-opacity-90' : 'bg-white bg-opacity-10'
                 }`}></div>
               </div>
               {/* Tier labels */}
@@ -564,7 +671,7 @@ const Home = () => {
             <div className="flex justify-end">
               <button
                 onClick={() => {
-                  if (user && isDeviceRecognized) {
+                  if (isAuthenticated && user) {
                     navigate('/donations');
                   } else {
                     navigate('/register');
@@ -601,15 +708,18 @@ const Home = () => {
             <div className="flex flex-col gap-6 p-4">
               {projects.map((project) => {
                 const projectImage = getProjectImage(project);
-                // Get raised amount - check multiple possible field names
+                // Get raised amount - use 'raised' field from API (primary source)
+                // Fallback to other field names for backward compatibility
                 const raisedAmount = Number(
+                  project.raised || 
                   project.amount || 
                   project.current_amount || 
                   project.raised_amount || 
                   0
                 );
-                // Get target amount
-                const targetAmount = Number(project.target_amount || 0);
+                // Get target amount - use 'target' field from API (primary source)
+                // Fallback to 'target_amount' for backward compatibility
+                const targetAmount = Number(project.target || project.target_amount || 0);
                 // Calculate progress percentage (0-100)
                 const progressPercentage = targetAmount > 0 
                   ? Math.min((raisedAmount / targetAmount) * 100, 100) 
@@ -739,7 +849,7 @@ const Home = () => {
 
                       {/* CTA Button */}
                       <button
-                        onClick={() => window.location.href = `/donations?project=${encodeURIComponent(project.project_title)}`}
+                        onClick={() => navigate(`/donations?project=${encodeURIComponent(project.project_title)}`)}
                         className="w-full bg-gradient-to-r from-gray-600 via-gray-700 to-gray-800 text-white py-3.5 px-6 rounded-xl font-bold text-sm shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2 group/btn relative overflow-hidden"
                       >
                         <span className="relative z-10 flex items-center gap-2">

@@ -53,18 +53,31 @@ api.interceptors.response.use(
       // Don't redirect for notification or alumni list fetches - these are non-critical
       const isNonCriticalFetch = error.config?.url?.includes('/messages') || error.config?.url?.includes('/donors');
       
-      // Clear all auth-related storage
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('device_session');
-      localStorage.removeItem('donor_session_id');
-      localStorage.removeItem('donor_username');
-      localStorage.removeItem('user');
+      // CRITICAL: Don't clear session storage for session check endpoints - they're checking validity
+      // Only clear if it's NOT a session check endpoint (session check might return 401 if expired, but we handle that in checkSession)
+      if (!isSessionCheck) {
+        // Clear all auth-related storage
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('device_session');
+        localStorage.removeItem('donor_session_id');
+        localStorage.removeItem('donor_username');
+        localStorage.removeItem('user');
+        localStorage.removeItem('cached_user_data'); // Also clear cached user data
+        
+        // Clear all cached donation totals
+        Object.keys(localStorage).forEach(key => {
+          if (key.startsWith('abu_totalDonated_')) {
+            localStorage.removeItem(key);
+          }
+        });
+      }
       
       // Only redirect if not already on auth pages, not a session check, and not a non-critical fetch
-      if (!isAuthPage && !isSessionCheck && !isNonCriticalFetch) {
+      // Also don't redirect if on home page (/) - allow unauthenticated access
+      if (!isAuthPage && !isSessionCheck && !isNonCriticalFetch && currentPath !== '/') {
         // Use a small delay to prevent redirect loops
         setTimeout(() => {
-          if (window.location.pathname !== '/login') {
+          if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
             window.location.href = '/login';
           }
         }, 100);

@@ -32,6 +32,42 @@ export const AuthProvider = ({ children }) => {
     checkSession();
   }, []);
 
+  // Cache user data for optimistic restoration on refresh
+  const cacheUserData = (donorData, username) => {
+    try {
+      localStorage.setItem('cached_user_data', JSON.stringify({
+        user: donorData,
+        username: username,
+        timestamp: Date.now()
+      }));
+    } catch (error) {
+      console.error('Error caching user data:', error);
+    }
+  };
+
+  // Get cached user data (for optimistic restoration)
+  const getCachedUserData = () => {
+    try {
+      const cached = localStorage.getItem('cached_user_data');
+      if (cached) {
+        const data = JSON.parse(cached);
+        // Only use cache if it's less than 24 hours old
+        const cacheAge = Date.now() - data.timestamp;
+        const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+        if (cacheAge < maxAge) {
+          return data;
+        } else {
+          // Cache expired, remove it
+          localStorage.removeItem('cached_user_data');
+        }
+      }
+    } catch (error) {
+      console.error('Error reading cached user data:', error);
+      localStorage.removeItem('cached_user_data');
+    }
+    return null;
+  };
+
   // Check donor session from localStorage and verify with backend
   const checkSession = async () => {
     try {
@@ -39,51 +75,124 @@ export const AuthProvider = ({ children }) => {
       const storedUsername = localStorage.getItem('donor_username');
 
       if (storedSessionId) {
-        // Verify session with backend
-        const response = await donorSessionsAPI.getCurrentSession(parseInt(storedSessionId));
-        
-        if (response.data?.success && response.data?.data) {
-          const sessionData = response.data.data;
-          // Handle different response structures for donor data
-          const donorData = sessionData.donor || sessionData.data?.donor || response.data.data?.donor;
-          
-          console.log('checkSession - Full response:', response.data);
-          console.log('checkSession - Session data:', sessionData);
-          console.log('checkSession - Donor data:', donorData);
-          console.log('checkSession - Profile image:', donorData?.profile_image);
-          
+        // OPTIMISTIC RESTORATION: Restore from cache immediately for better UX
+        // This prevents users from appearing logged out during network delays
+        const cachedData = getCachedUserData();
+        if (cachedData && cachedData.user) {
+          console.log('Restoring user from cache (optimistic restoration)');
           setSessionId(storedSessionId);
-          setUsername(sessionData.username || storedUsername);
-          setUser(donorData); // Set user with the donor data
+          setUsername(cachedData.username || storedUsername);
+          setUser(cachedData.user);
           setIsAuthenticated(true);
           setIsDeviceRecognized(true);
           setHasDonorSession(true);
-          if (sessionData.device_session_id) {
-            setDeviceSessionId(sessionData.device_session_id);
-          }
-          setLoading(false); // Set loading to false on success
+          setLoading(false); // Set loading to false immediately so UI can render
         } else {
-          // Session invalid, clear storage
-          clearDonorSession();
-          // Check device recognition after clearing session
-          await checkDeviceAndDonorSession();
+          // No cache but we have session ID - optimistically keep user logged in
+          // This prevents logout during refresh even if cache is missing
+          console.log('No cache found, but session ID exists - keeping optimistic auth state');
+          setSessionId(storedSessionId);
+          setUsername(storedUsername);
+          setIsAuthenticated(true);
+          setIsDeviceRecognized(true);
+          setHasDonorSession(true);
+          setLoading(false); // Set loading to false so UI can render
+          // User will be set when API call completes
+        }
+
+        // Now verify session with backend in the background
+        try {
+          const response = await donorSessionsAPI.getCurrentSession(parseInt(storedSessionId));
+          
+          if (response.data?.success && response.data?.data) {
+            const sessionData = response.data.data;
+            // Handle different response structures for donor data
+            const donorData = sessionData.donor || sessionData.data?.donor || response.data.data?.donor;
+            
+            console.log('checkSession - Full response:', response.data);
+            console.log('checkSession - Session data:', sessionData);
+            console.log('checkSession - Donor data:', donorData);
+            console.log('checkSession - Profile image:', donorData?.profile_image);
+            
+            // Update with fresh data from backend
+            setSessionId(storedSessionId);
+            setUsername(sessionData.username || storedUsername);
+            setUser(donorData);
+            setIsAuthenticated(true);
+            setIsDeviceRecognized(true);
+            setHasDonorSession(true);
+            
+            // Update cache with fresh data
+            cacheUserData(donorData, sessionData.username || storedUsername);
+            
+            if (sessionData.device_session_id) {
+              setDeviceSessionId(sessionData.device_session_id);
+            }
+            setLoading(false);
+          } else {
+            // Session invalid, clear storage and cache
+            console.log('Session verification failed - clearing session');
+            clearDonorSession();
+            localStorage.removeItem('cached_user_data');
+            // Check device recognition after clearing session
+            await checkDeviceAndDonorSession();
+          }
+        } catch (verifyError) {
+          console.error('Session verification error:', verifyError);
+          
+          // Only clear session if it's a 401 (unauthorized), not for other errors
+          if (verifyError.response?.status === 401) {
+            // Session invalid or expired, clear storage and cache
+            console.log('Session expired (401) - clearing session');
+            clearDonorSession();
+            localStorage.removeItem('cached_user_data');
+            await checkDeviceAndDonorSession();
+          } else {
+            // Network error or other issue - keep user logged in optimistically
+            // The optimistic restoration above already set the auth state
+            console.log('Network error during session verification, keeping optimistic session');
+            // If we don't have user data yet (no cache), keep auth state but user will be null
+            // This prevents logout on network errors
+            // Loading is already set to false by optimistic restoration
+            // User will remain logged in until next successful verification
+            // If we have cached data, it was already restored above
+          }
         }
       } else {
         // No session, check device recognition and donor session status
+        localStorage.removeItem('cached_user_data'); // Clear any stale cache
         await checkDeviceAndDonorSession();
       }
     } catch (error) {
       console.error('Session check error:', error);
-      // Only clear session if it's a 401 (unauthorized), not for other errors
-      if (error.response?.status === 401) {
-        // Session invalid or expired, clear storage and check device
-        clearDonorSession();
-        await checkDeviceAndDonorSession();
-      } else {
-        // For other errors (network, etc.), don't clear session - might be temporary
-        // Just set loading to false and keep current state
-        setLoading(false);
+      // Fallback: if we have a session ID, keep user logged in optimistically
+      const storedSessionId = localStorage.getItem('donor_session_id');
+      const storedUsername = localStorage.getItem('donor_username');
+      
+      if (storedSessionId) {
+        // Try to use cached data if available
+        const cachedData = getCachedUserData();
+        if (cachedData && cachedData.user) {
+          console.log('Using cached data as fallback');
+          setSessionId(storedSessionId);
+          setUsername(cachedData.username || storedUsername);
+          setUser(cachedData.user);
+          setIsAuthenticated(true);
+          setIsDeviceRecognized(true);
+          setHasDonorSession(true);
+        } else {
+          // No cache but we have session ID - keep optimistic auth state
+          console.log('No cache but session ID exists - keeping optimistic auth state');
+          setSessionId(storedSessionId);
+          setUsername(storedUsername);
+          setIsAuthenticated(true);
+          setIsDeviceRecognized(true);
+          setHasDonorSession(true);
+          // User will be null but isAuthenticated will be true
+          // This prevents logout on errors
+        }
       }
+      setLoading(false);
     }
   };
 
@@ -94,21 +203,25 @@ export const AuthProvider = ({ children }) => {
       const response = await donorSessionsAPI.checkDevice();
       
       if (response.data?.success && response.data?.recognized) {
-        // Device is recognized
+        // Device is recognized - but user is NOT authenticated yet
         setIsDeviceRecognized(true);
-        setUser(response.data.donor);
         
-        if (response.data.device_session?.id) {
-          setDeviceSessionId(response.data.device_session.id);
-        }
-        
-        // Check if donor has a session
+        // Only set user if they have an active donor session (authenticated)
+        // Otherwise, just store donor info for display purposes but don't set as authenticated
         if (response.data.has_donor_session && response.data.donor_session) {
-          // Donor has a session - they should login
+          // Donor has a session - they should login (not authenticated yet)
           setHasDonorSession(true);
+          // Don't set user here - wait for actual login
+          setUser(null);
         } else {
           // Device recognized but no donor session - they should register
           setHasDonorSession(false);
+          // Don't set user here - they need to register/login first
+          setUser(null);
+        }
+        
+        if (response.data.device_session?.id) {
+          setDeviceSessionId(response.data.device_session.id);
         }
       } else {
         // Device not recognized
@@ -136,7 +249,9 @@ export const AuthProvider = ({ children }) => {
       const response = await api.get('/api/device/check');
       
       if (response.data.recognized) {
-        setUser(response.data.donor);
+        // Device is recognized but user is NOT authenticated yet
+        // Don't set user - they need to login/register first
+        setUser(null);
         setIsDeviceRecognized(true);
         // We don't know if they have a donor session, so check it
         // This is a fallback, so we'll assume they need to register/login
@@ -173,6 +288,9 @@ export const AuthProvider = ({ children }) => {
         // Store session in localStorage
         localStorage.setItem('donor_session_id', newSessionId.toString());
         localStorage.setItem('donor_username', newUsername);
+        
+        // Cache user data for optimistic restoration on refresh
+        cacheUserData(donor, newUsername);
         
         // Update state
         setSessionId(newSessionId.toString());
@@ -240,6 +358,9 @@ export const AuthProvider = ({ children }) => {
         // Store session in localStorage
         localStorage.setItem('donor_session_id', newSessionId.toString());
         localStorage.setItem('donor_username', newUsername);
+        
+        // Cache user data for optimistic restoration on refresh
+        cacheUserData(donor, newUsername);
         
         // Update state
         setSessionId(newSessionId.toString());
@@ -320,6 +441,14 @@ export const AuthProvider = ({ children }) => {
       setIsDeviceRecognized(false);
       setDeviceSessionId(null);
       setHasDonorSession(false);
+      
+      // Clear all cached donation totals on logout
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('abu_totalDonated_')) {
+          localStorage.removeItem(key);
+        }
+      });
+      
       setLogoutLoading(false);
     }
   };
@@ -328,9 +457,18 @@ export const AuthProvider = ({ children }) => {
   const clearDonorSession = () => {
     localStorage.removeItem('donor_session_id');
     localStorage.removeItem('donor_username');
+    localStorage.removeItem('cached_user_data'); // Clear cached user data
     setSessionId(null);
     setUsername(null);
     setIsAuthenticated(false);
+    // Also clear user to ensure no stale data
+    setUser(null);
+    // Clear all cached donation totals
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('abu_totalDonated_')) {
+        localStorage.removeItem(key);
+      }
+    });
     // Note: We now also clear user/device recognition in logout() to allow new user login
   };
 
@@ -354,6 +492,9 @@ export const AuthProvider = ({ children }) => {
         // Store session in localStorage
         localStorage.setItem('donor_session_id', newSessionId.toString());
         localStorage.setItem('donor_username', newUsername);
+        
+        // Cache user data for optimistic restoration on refresh
+        cacheUserData(donor, newUsername);
         
         // Update state
         setSessionId(newSessionId.toString());
@@ -468,6 +609,9 @@ export const AuthProvider = ({ children }) => {
         // Store session in localStorage
         localStorage.setItem('donor_session_id', newSessionId.toString());
         localStorage.setItem('donor_username', newUsername);
+        
+        // Cache user data for optimistic restoration on refresh
+        cacheUserData(donor, newUsername);
         
         // Update state - ensure all state is set synchronously
         setSessionId(newSessionId.toString());

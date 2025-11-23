@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import api, { paymentsAPI, getCsrfCookie, formatNaira } from '../services/api';
 import { getDeviceFingerprint } from '../utils/deviceFingerprint';
 import SessionCreationModal from '../components/SessionCreationModal';
+import AuthModal from '../components/AuthModal';
 import countries from '../utils/countries';
 import { GoogleSignInButton } from '../hooks/useGoogleAuth';
 import abuLogo from '../assets/abu_logo.png';
@@ -16,12 +17,19 @@ const Donations = () => {
   const { user, isDeviceRecognized, loading, createDonor, updateDonor, searchAlumni, isAuthenticated, register, login, googleRegister, googleLogin, checkSession } = useAuth();
   const projectFromQuery = searchParams.get('project') || '';
   const isEndowment = !projectFromQuery;
+  // Decode project query for matching (handle URL encoding)
+  const decodedProjectQuery = projectFromQuery ? decodeURIComponent(projectFromQuery) : '';
   
   // Session creation modal state
   const [showSessionModal, setShowSessionModal] = useState(false);
   const [pendingDonorId, setPendingDonorId] = useState(null);
   
+  // Auth modal state
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  
   const [currentStep, setCurrentStep] = useState('donation'); // donation, login-register, donor-type-selection, registration, alumni-search
+  
+  // Note: Phone number is no longer required for payments
   const [donationData, setDonationData] = useState({
     amount: '',
     name: '',
@@ -95,9 +103,9 @@ const Donations = () => {
       .catch(() => setProjects([]));
   }, []);
 
-  // Helper to get selected project by title
+  // Helper to get selected project by title (handle URL decoding)
   const selectedProject = projects.find(
-    p => p.project_title === projectFromQuery
+    p => p.project_title === decodedProjectQuery || p.project_title === projectFromQuery
   );
 
   // --- Registration Form Steps ---
@@ -338,25 +346,32 @@ const Donations = () => {
       return;
     }
 
-    // Use user data if authenticated, otherwise show error
-    if (!user || !user.email) {
-      toast.error('Please login to make a donation');
-      setCurrentStep('login-register');
+    // Use user data if authenticated, otherwise show auth modal
+    if (!user || !user.email || !isAuthenticated) {
+      toast.error('Please login or register to make a donation');
+      setShowAuthModal(true);
+      setProcessingPayment(false);
       return;
     }
 
+    // Note: Phone validation will be handled by backend
+    // We'll proceed with payment and handle phone errors from backend response
     setProcessingPayment(true);
     
     try {
       await getCsrfCookie();
       
       // Prepare metadata with separate name fields from user data
+      // Include phone as empty string to satisfy backend validation (backend may require the field even if empty)
+      // Note: Email is sent in paymentData.email (top level) for Paystack, not in metadata
+      // CRITICAL: Include donor_id in metadata so backend uses the authenticated donor, not device session donor
       const metadata = {
         name: user.name || '',
         surname: user.surname || '',
         other_name: user.other_name || null,
-        phone: user.phone || '',
-        email: user.email || '',
+        phone: '', // Send empty string - backend should accept this or make field optional
+        donor_id: user.id, // CRITICAL: Tell backend to use this donor_id, not device session donor
+        // email: Not included - backend uses device session donor or paymentData.email
         endowment: selectedProject ? 'no' : 'yes',
         type: selectedProject ? 'project' : 'endowment'
       };
@@ -365,15 +380,32 @@ const Donations = () => {
         metadata.project_title = selectedProject.project_title;
       }
       
+      // Convert amount to number (backend expects numeric, min:100 in naira)
+      const amountInNaira = parseFloat(donationData.amount) || 0;
+      
+      if (amountInNaira < 100) {
+        toast.error('Minimum donation amount is ₦100');
+        setProcessingPayment(false);
+        return;
+      }
+      
       const paymentData = {
         email: user.email || '',
-        amount: donationData.amount,
+        amount: amountInNaira, // Send amount in naira as number (backend will convert to kobo for Paystack)
         device_fingerprint: getDeviceFingerprint(),
         callback_url: `${window.location.origin}/donations`,
         metadata: metadata
       };
       
+      console.log('Payment data with donor_id:', {
+        email: paymentData.email,
+        donor_id: metadata.donor_id,
+        user_id: user.id,
+        authenticated: isAuthenticated
+      });
+      
       console.log('Initializing Paystack payment:', paymentData);
+      console.log('Amount in Naira:', amountInNaira);
       
       const response = await paymentsAPI.initialize(paymentData);
 
@@ -384,7 +416,95 @@ const Donations = () => {
       
       // Open Paystack payment popup
       const popup = new window.PaystackPop();
-      popup.resumeTransaction(access_code);
+      popup.resumeTransaction(access_code, {
+        onSuccess: (response) => {
+          // Payment successful - verify immediately with backend
+          console.log('Paystack payment successful:', response);
+          const reference = response.reference || response.trxref;
+          
+          if (reference) {
+            // Verify payment with backend immediately
+            console.log('Verifying payment immediately with reference:', reference);
+            paymentsAPI.verify(reference)
+              .then(verifyResponse => {
+                console.log('Immediate verification response:', verifyResponse.data);
+                const verifyData = verifyResponse.data.data || verifyResponse.data;
+                
+                // Check both status and gateway_response
+                const isSuccess = verifyResponse.data.success || 
+                                verifyData?.status === 'success' ||
+                                (verifyData?.gateway_response && 
+                                 verifyData.gateway_response.toLowerCase() === 'successful');
+                
+                if (isSuccess) {
+                  const projectName = selectedProject?.project_title || 'the Endowment Fund';
+                  const amount = verifyData?.amount ? verifyData.amount / 100 : amountInNaira;
+                  
+                  // Store thank you data
+                  sessionStorage.setItem('donationThankYou', JSON.stringify({
+                    project: projectName,
+                    amount: amount
+                  }));
+                  
+                  toast.success('Payment verified successfully! 🎉');
+                  
+                  // Redirect to home using React Router to preserve authentication state
+                  setTimeout(() => {
+                    navigate('/', { replace: true });
+                  }, 500);
+                } else {
+                  // Verification didn't confirm success, but payment was made
+                  console.warn('Payment made but verification unclear:', verifyData);
+                  toast.success('Payment received! Verification in progress...');
+                  
+                  // Still redirect - webhook will handle final verification
+                  const projectName = selectedProject?.project_title || 'the Endowment Fund';
+                  sessionStorage.setItem('donationThankYou', JSON.stringify({
+                    project: projectName,
+                    amount: amountInNaira
+                  }));
+                  
+                  setTimeout(() => {
+                    navigate('/', { replace: true });
+                  }, 500);
+                }
+              })
+              .catch(error => {
+                console.error('Immediate verification error:', error);
+                // Payment was successful in Paystack, but verification failed
+                // Still proceed - webhook will handle verification
+                toast.success('Payment received! Verification in progress...');
+                
+                const projectName = selectedProject?.project_title || 'the Endowment Fund';
+                sessionStorage.setItem('donationThankYou', JSON.stringify({
+                  project: projectName,
+                  amount: amountInNaira
+                }));
+                
+                setTimeout(() => {
+                  navigate('/', { replace: true });
+                }, 500);
+              });
+          } else {
+            // No reference - fallback to callback URL handling
+            console.warn('No reference in Paystack response, relying on callback URL');
+            const projectName = selectedProject?.project_title || 'the Endowment Fund';
+            sessionStorage.setItem('donationThankYou', JSON.stringify({
+              project: projectName,
+              amount: amountInNaira
+            }));
+            
+            setTimeout(() => {
+              navigate('/', { replace: true });
+            }, 500);
+          }
+        },
+        onClose: () => {
+          // If popup is closed, check if payment was successful via callback URL
+          console.log('Paystack popup closed');
+          // The callback URL handler in useEffect will check for reference parameter
+        }
+      });
       
       // After payment, redirect will be handled by Paystack callback
       // The webhook will handle the donation record creation
@@ -392,21 +512,48 @@ const Donations = () => {
     } catch (error) {
       console.error('Payment error:', error);
       console.error('Payment error response:', error.response?.data);
+      console.error('Payment error status:', error.response?.status);
       
       if (error.response?.status === 500) {
         toast.error('Server error during payment initialization. Please check backend logs.');
       } else if (error.response?.status === 422) {
-        const validationErrors = error.response.data.errors;
-        if (validationErrors) {
-          const errorMessages = Object.values(validationErrors).flat().join(', ');
-          toast.error(`Payment validation errors: ${errorMessages}`);
+        const validationErrors = error.response?.data?.errors || {};
+        console.error('Validation errors details:', validationErrors);
+        
+        // Handle validation errors
+        if (Object.keys(validationErrors).length > 0) {
+          // Check if it's a phone error - backend still requires phone field
+          const phoneError = validationErrors.phone || 
+                            validationErrors['metadata.phone'] || 
+                            validationErrors['metadata.phone.0'];
+          
+          if (phoneError) {
+            // Backend requires phone but we're sending empty string
+            // This means backend validation needs to be updated to make phone optional
+            console.error('Backend phone validation error:', phoneError);
+            toast.error(
+              'Backend validation error: Phone field is required by the backend. Please update backend to make phone optional for donations.', 
+              { 
+                duration: 8000,
+                icon: '⚠️'
+              }
+            );
+          } else {
+            // Show each validation error clearly
+            const errorMessages = Object.entries(validationErrors)
+              .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
+              .join(' | ');
+            toast.error(`Validation failed: ${errorMessages}`, { duration: 6000 });
+          }
         } else {
-          toast.error('Payment validation failed. Please check your input.');
+          const errorMessage = error.response?.data?.message || 'Payment validation failed. Please check your input.';
+          toast.error(errorMessage, { duration: 5000 });
         }
       } else if (error.code === 'ERR_NETWORK') {
         toast.error('Network error. Please check your internet connection.');
       } else {
-        toast.error('Payment initialization failed. Please try again.');
+        const errorMessage = error.response?.data?.message || error.message || 'Payment initialization failed. Please try again.';
+        toast.error(errorMessage, { duration: 5000 });
       }
     } finally {
       setProcessingPayment(false);
@@ -444,11 +591,24 @@ const Donations = () => {
       const projectFromUrl = urlProject ? decodeURIComponent(urlProject) : null;
       
       // Payment completed - verify with backend
+      console.log('Verifying payment with reference:', paymentRef);
       paymentsAPI.verify(paymentRef)
         .then(response => {
           console.log('Payment verification response:', response.data);
           const paymentData = response.data.data || response.data;
-          const isSuccess = response.data.success || paymentData?.status === 'success';
+          
+          // Check both status and gateway_response as per backend guide
+          const isSuccess = response.data.success || 
+                          paymentData?.status === 'success' ||
+                          (paymentData?.gateway_response && 
+                           paymentData.gateway_response.toLowerCase() === 'successful');
+          
+          console.log('Payment verification result:', {
+            isSuccess,
+            status: paymentData?.status,
+            gateway_response: paymentData?.gateway_response,
+            responseSuccess: response.data.success
+          });
           
           if (isSuccess) {
             // Get amount from payment response or fallback
@@ -463,18 +623,16 @@ const Donations = () => {
             // Clean URL first
             window.history.replaceState({}, document.title, window.location.pathname);
             
-            // Redirect to home immediately with thank you message
+            // Store thank you data in sessionStorage for home page to pick up (more reliable than navigate state)
+            sessionStorage.setItem('donationThankYou', JSON.stringify({
+              project: projectName,
+              amount: amount
+            }));
+            
+            // Redirect to home using React Router to preserve authentication state
             setTimeout(() => {
-              navigate('/', {
-                state: {
-                  thankYou: {
-                    project: projectName,
-                    amount: amount
-                  }
-                },
-                replace: true
-              });
-            }, 500);
+              navigate('/', { replace: true });
+            }, 300); // Reduced delay for faster redirect
           } else {
             // Payment failed or pending
             toast.error('Payment verification failed. Please contact support if payment was deducted.');
@@ -494,26 +652,47 @@ const Donations = () => {
           // Clean URL
           window.history.replaceState({}, document.title, window.location.pathname);
           
-          // Redirect to home
+          // Redirect to home using React Router to preserve authentication state
           setTimeout(() => {
-            navigate('/', {
-              state: {
-                thankYou: {
-                  project: projectName,
-                  amount: amount
-                }
-              },
-              replace: true
-            });
-          }, 500);
+            // Store thank you data in sessionStorage for home page to pick up
+            sessionStorage.setItem('donationThankYou', JSON.stringify({
+              project: projectName,
+              amount: amount
+            }));
+            // Use navigate to preserve authentication state
+            navigate('/', { replace: true });
+          }, 500); // Reduced delay for faster redirect
         });
     }
-  }, [navigate, searchParams, selectedProject]);
+  }, [navigate, searchParams, selectedProject, donationData]);
 
   // Check if user needs to login/register first
+  // Only show login modal if not authenticated AND not already on login step
+  // Add longer delay to ensure auth state is fully restored (optimistic restoration)
   useEffect(() => {
+    // Wait for loading to complete and give extra time for session restoration
     if (!loading && !isAuthenticated && currentStep === 'donation') {
-      setCurrentStep('login-register');
+      // Longer delay to ensure optimistic session restoration completes
+      const timer = setTimeout(() => {
+        // Triple-check authentication state before showing login modal
+        // This prevents showing login modal if user is actually authenticated
+        // but session restoration is still in progress
+        if (!isAuthenticated && currentStep === 'donation') {
+          // Check localStorage directly as a final check
+          const storedSessionId = localStorage.getItem('donor_session_id');
+          if (!storedSessionId) {
+            // Only show login if there's truly no session
+            setCurrentStep('login-register');
+          }
+          // If session ID exists, keep on donation step - session will restore
+        }
+      }, 1000); // Increased delay to 1 second for session restoration
+      return () => clearTimeout(timer);
+    }
+    
+    // If user becomes authenticated, ensure we're on donation step
+    if (!loading && isAuthenticated && currentStep === 'login-register') {
+      setCurrentStep('donation');
     }
   }, [loading, isAuthenticated, currentStep]);
 
@@ -1256,6 +1435,17 @@ const Donations = () => {
         donorId={pendingDonorId}
         onSuccess={handleSessionCreated}
       />
+      
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        onSuccess={async () => {
+          // Refresh user data after successful login/register
+          await checkSession();
+          setShowAuthModal(false);
+        }}
+      />
       <div className="max-w-2xl mx-auto px-4">
         <div className="bg-white rounded-xl shadow-lg p-8">
           {/* Welcome Message */}
@@ -1287,9 +1477,6 @@ const Donations = () => {
                 </span>
               </p>
             )}
-            <h1 className="text-3xl font-bold text-gray-900 mb-4">
-              Thank you for contributing to {selectedProject ? selectedProject.project_title : 'the Endowment Fund'}!
-            </h1>
           </div>
 
           {/* Project Details */}
@@ -1302,31 +1489,25 @@ const Donations = () => {
                 {projectDetails.description}
               </p>
               <div className="text-sm text-blue-700">
-                <p><strong>Target:</strong> {formatNaira(projectDetails.target_amount)}</p>
-                <p><strong>Raised:</strong> {formatNaira(projectDetails.amount)}</p>
+                <p><strong>Target:</strong> {formatNaira(projectDetails.target || projectDetails.target_amount || 0)}</p>
+                <p><strong>Raised:</strong> {formatNaira(projectDetails.raised || projectDetails.amount || projectDetails.current_amount || projectDetails.raised_amount || 0)}</p>
               </div>
             </div>
           )}
 
-          {/* New User Options - Show if not authenticated */}
+          {/* Login/Register Buttons - Show if not authenticated */}
           {!isAuthenticated && (
-            <div className="mb-8 p-6 bg-yellow-50 rounded-lg">
-              <h3 className="text-lg font-semibold text-yellow-800 mb-2">First time here?</h3>
-              <p className="text-sm text-yellow-700 mb-4">
-                Search for your alumni record or register as a new supporter to get started
+            <div className="mb-8 p-6 bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg border-2 border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">Login or Register to Donate</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Please login or create an account to proceed with your donation
               </p>
               <div className="flex gap-4">
                 <button
-                  onClick={() => setCurrentStep('alumni-search')}
-                  className="flex-1 py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+                  onClick={() => setShowAuthModal(true)}
+                  className="flex-1 py-3 px-6 bg-gradient-to-r from-gray-600 to-gray-700 text-white rounded-xl hover:from-gray-700 hover:to-gray-800 transition-all transform hover:scale-105 shadow-lg font-semibold"
                 >
-                  I'm an ABU Alumni
-                </button>
-                <button
-                  onClick={() => setCurrentStep('registration')}
-                  className="flex-1 py-2 px-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold"
-                >
-                  New Supporter
+                  Login / Register
                 </button>
               </div>
             </div>
@@ -1351,11 +1532,12 @@ const Donations = () => {
 
             <button
               type="submit"
-              disabled={processingPayment}
+              disabled={processingPayment || !isAuthenticated}
               className="w-full py-3 rounded-lg font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 transition-all duration-200 flex items-center justify-center gap-2"
             >
               <FaCreditCard className="w-5 h-5" />
               {processingPayment ? 'Processing...' : 
+               !isAuthenticated ? 'Please Login or Register' :
                alumniData ? 'Update & Continue' : 
                `Pay ${formatNaira(donationData.amount)} ${isEndowment ? 'to Endowment' : 'to Project'}`
               }

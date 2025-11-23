@@ -11,6 +11,7 @@ const Register = () => {
   const navigate = useNavigate();
   const { register, googleRegister, googleLogin, isAuthenticated, loading, user } = useAuth();
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const hasRedirected = useRef(false);
 
   // Redirect if already authenticated (but only once, prevent loops)
@@ -442,7 +443,11 @@ const Register = () => {
 
       if (result.success) {
         toast.success(result.message || 'Registration successful! You can now complete your profile.');
-        navigate('/', { replace: true });
+        setIsRedirecting(true);
+        // Small delay to ensure state is fully updated
+        setTimeout(() => {
+          navigate('/', { replace: true });
+        }, 200);
       } else {
         toast.error(result.message || 'Registration failed');
         
@@ -502,6 +507,7 @@ const Register = () => {
       if (result.success) {
         toast.success(result.message || 'Google registration successful!');
         console.log('Registration successful, navigating to home...');
+        setIsRedirecting(true);
         
         // Wait for state to be fully updated, then navigate
         setTimeout(() => {
@@ -523,6 +529,7 @@ const Register = () => {
             
             if (loginResult.success) {
               toast.success('Successfully logged in!');
+              setIsRedirecting(true);
               // Wait a bit longer to ensure state is fully updated before navigation
               setTimeout(() => {
                 // Force navigation to home
@@ -603,12 +610,12 @@ const Register = () => {
     }
   };
 
-  if (loading) {
+  if (loading || isRedirecting) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center p-4">
         <div className="text-center">
           <FaSpinner className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">Loading...</p>
+          <p className="text-gray-600">{isRedirecting ? 'Redirecting...' : 'Loading...'}</p>
         </div>
       </div>
     );

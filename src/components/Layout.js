@@ -42,7 +42,7 @@ const Layout = ({ children }) => {
     toast.success('Logged out successfully. You can now login with a different account.');
     // Small delay before navigation to ensure state is cleared
     setTimeout(() => {
-      navigate('/login', { replace: true });
+      navigate('/', { replace: true });
     }, 300);
   };
 

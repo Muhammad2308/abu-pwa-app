@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../services/api';
+import api, { formatNaira } from '../services/api';
 import { FaHandHoldingHeart } from 'react-icons/fa';
 import { getBaseUrl } from '../services/api';
 
@@ -66,9 +66,59 @@ const Projects = () => {
             </div>
             <div className="p-4 flex-1 flex flex-col">
               <h2 className="font-semibold text-lg mb-1 text-primary-700">{project.project_title}</h2>
-              <p className="text-gray-600 text-sm flex-1">{project.project_description}</p>
+              <p className="text-gray-600 text-sm flex-1 mb-3">{project.project_description}</p>
+              
+              {/* Funding Information */}
+              <div className="mb-3 pt-3 border-t border-gray-200">
+                {/* Raised Amount */}
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs text-gray-500">Raised:</span>
+                  <span className="text-sm font-bold text-blue-600">
+                    {formatNaira(project.raised || project.amount || project.current_amount || project.raised_amount || 0)}
+                  </span>
+                </div>
+                
+                {/* Target Amount (if available) */}
+                {(project.target || project.target_amount) && (
+                  <>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-xs text-gray-500">Target:</span>
+                      <span className="text-sm font-semibold text-gray-700">
+                        {formatNaira(project.target || project.target_amount)}
+                      </span>
+                    </div>
+                    
+                    {/* Progress Bar */}
+                    {(() => {
+                      const raised = Number(project.raised || project.amount || project.current_amount || project.raised_amount || 0);
+                      const target = Number(project.target || project.target_amount || 0);
+                      const progress = target > 0 ? Math.min((raised / target) * 100, 100) : 0;
+                      
+                      return (
+                        <div className="mt-2">
+                          <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-gradient-to-r from-blue-500 to-blue-600 rounded-full transition-all duration-300"
+                              style={{ width: `${Math.max(progress, 2)}%` }}
+                            />
+                          </div>
+                          <div className="flex justify-between items-center mt-1">
+                            <span className="text-xs text-gray-500">
+                              {progress.toFixed(1)}% funded
+                            </span>
+                            {progress >= 100 && (
+                              <span className="text-xs font-semibold text-green-600">✓ Goal Reached!</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </>
+                )}
+              </div>
+              
               <button
-                className="mt-4 bg-blue-600 text-white py-1.5 px-4 rounded-lg flex items-center gap-2 font-medium shadow transition-all duration-200 transform hover:bg-blue-700 hover:scale-105 hover:shadow-lg"
+                className="mt-auto bg-blue-600 text-white py-1.5 px-4 rounded-lg flex items-center gap-2 font-medium shadow transition-all duration-200 transform hover:bg-blue-700 hover:scale-105 hover:shadow-lg"
                 onClick={() => navigate(`/donations?project=${encodeURIComponent(project.project_title)}`)}
               >
                 <FaHandHoldingHeart className="text-lg" />
