@@ -858,50 +858,48 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('device_fingerprint');
   };
 
-  // Forgot Password - Request Reset Code
+  // Forgot Password - Request Reset Link
   const requestPasswordReset = async (email) => {
     try {
       const response = await donorSessionsAPI.requestPasswordReset(email);
-      
-      if (response.data?.success) {
-        return { success: true, message: response.data.message || 'Reset code sent to your email' };
-      } else {
-        return { success: false, message: response.data?.message || 'Failed to send reset code' };
+
+      // Backend always returns generic success; treat any 2xx as success
+      if (response.status >= 200 && response.status < 300) {
+        return { success: true, message: response.data?.message || 'If an account exists, a reset link has been sent.' };
       }
+      return { success: false, message: response.data?.message || 'Failed to send reset link' };
     } catch (error) {
       console.error('Request password reset error:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to send reset code';
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to send reset link';
       return { success: false, message: errorMessage, error: error };
     }
   };
 
-  // Forgot Password - Verify Reset Code
-  const verifyResetCode = async (email, code) => {
+  // Forgot Password - Validate Reset Token
+  const validateResetToken = async (token) => {
     try {
-      const response = await donorSessionsAPI.verifyResetCode(email, code);
-      
+      const response = await donorSessionsAPI.validateResetToken(token);
+
       if (response.data?.success) {
-        return { success: true, message: response.data.message || 'Code verified successfully' };
-      } else {
-        return { success: false, message: response.data?.message || 'Invalid or expired code' };
+        return { success: true, data: response.data.data, message: response.data.message || 'Token valid' };
       }
+      return { success: false, message: response.data?.message || 'Invalid or expired link' };
     } catch (error) {
-      console.error('Verify reset code error:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to verify code';
+      console.error('Validate reset token error:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to validate reset link';
       return { success: false, message: errorMessage, error: error };
     }
   };
 
-  // Forgot Password - Reset Password
-  const resetPassword = async (email, code, newPassword) => {
+  // Forgot Password - Reset Password via Token
+  const resetPasswordWithToken = async (token, password, passwordConfirmation) => {
     try {
-      const response = await donorSessionsAPI.resetPassword(email, code, newPassword);
-      
+      const response = await donorSessionsAPI.resetPasswordWithToken(token, password, passwordConfirmation);
+
       if (response.data?.success) {
         return { success: true, message: response.data.message || 'Password reset successful' };
-      } else {
-        return { success: false, message: response.data?.message || 'Failed to reset password' };
       }
+      return { success: false, message: response.data?.message || 'Failed to reset password' };
     } catch (error) {
       console.error('Reset password error:', error);
       const errorMessage = error.response?.data?.message || error.message || 'Failed to reset password';
@@ -938,8 +936,8 @@ export const AuthProvider = ({ children }) => {
     googleRegister,
     // Forgot Password methods
     requestPasswordReset,
-    verifyResetCode,
-    resetPassword,
+    validateResetToken,
+    resetPasswordWithToken,
   };
 
   return (

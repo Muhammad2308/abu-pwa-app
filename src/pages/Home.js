@@ -835,13 +835,13 @@ const Home = () => {
                         {/* Amount Display */}
                         <div className="flex justify-between items-center mt-3">
                           <div>
-                            <p className="text-xs text-gray-500 mb-0.5">Raised</p>
-                            <p className="text-lg font-bold text-gray-900">{formatNaira(raisedAmount)}</p>
+                            <p className="text-[9px] text-gray-500 mb-0.5 uppercase tracking-wide">Raised</p>
+                            <p className="text-sm font-semibold text-gray-900">{formatNaira(raisedAmount)}</p>
                           </div>
                           {targetAmount > 0 && (
                             <div className="text-right">
-                              <p className="text-xs text-gray-500 mb-0.5">Goal</p>
-                              <p className="text-lg font-bold text-primary-600">{formatNaira(targetAmount)}</p>
+                              <p className="text-[9px] text-gray-500 mb-0.5 uppercase tracking-wide">Target</p>
+                              <p className="text-sm font-semibold text-primary-600">{formatNaira(targetAmount)}</p>
                             </div>
                           )}
                         </div>
