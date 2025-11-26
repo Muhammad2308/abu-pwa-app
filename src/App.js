@@ -35,47 +35,47 @@ function App() {
             <Route path="/register/addressable_alumni" element={<AddressableAlumni />} />
             <Route path="/register/non_addressable_alumni" element={<NonAddressableAlumni />} />
             <Route path="/register/friends" element={<Friends />} />
-            
+
             {/* Home route - accessible without auth */}
-            <Route 
-              path="/" 
+            <Route
+              path="/"
               element={
                 <ProtectedRoute requireAuth={false}>
                   <Layout><Home /></Layout>
                 </ProtectedRoute>
-              } 
+              }
             />
             {/* Protected routes */}
-            <Route 
-              path="/projects" 
+            <Route
+              path="/projects"
               element={
                 <ProtectedRoute>
                   <Layout><Projects /></Layout>
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="/contacts" 
+            <Route
+              path="/contacts"
               element={
                 <ProtectedRoute>
                   <Layout><Contacts /></Layout>
                 </ProtectedRoute>
-              } 
+              }
             />
-            <Route 
-              path="/profile" 
+            <Route
+              path="/profile"
               element={
                 <ProtectedRoute>
                   <Layout><Profile /></Layout>
                 </ProtectedRoute>
-              } 
+              }
             />
             {/* Donations page - accessible without auth for new user registration */}
-            <Route 
-              path="/donations" 
+            <Route
+              path="/donations"
               element={
                 <Layout><Donations /></Layout>
-              } 
+              }
             />
           </Routes>
         </Suspense>

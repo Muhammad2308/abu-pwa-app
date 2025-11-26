@@ -19,16 +19,16 @@ const Donations = () => {
   const isEndowment = !projectFromQuery;
   // Decode project query for matching (handle URL encoding)
   const decodedProjectQuery = projectFromQuery ? decodeURIComponent(projectFromQuery) : '';
-  
+
   // Session creation modal state
   const [showSessionModal, setShowSessionModal] = useState(false);
   const [pendingDonorId, setPendingDonorId] = useState(null);
-  
+
   // Auth modal state
   const [showAuthModal, setShowAuthModal] = useState(false);
-  
+
   const [currentStep, setCurrentStep] = useState('donation'); // donation, login-register, donor-type-selection, registration, alumni-search
-  
+
   // Note: Phone number is no longer required for payments
   const [donationData, setDonationData] = useState({
     amount: '',
@@ -40,14 +40,14 @@ const Donations = () => {
   });
   const [processingPayment, setProcessingPayment] = useState(false);
   const [projectDetails, setProjectDetails] = useState(null);
-  
+
   // Alumni search states
   const [regNumber, setRegNumber] = useState('');
   const [searchEmail, setSearchEmail] = useState('');
   const [searchPhone, setSearchPhone] = useState('');
   const [alumniData, setAlumniData] = useState(null);
   const [searching, setSearching] = useState(false);
-  
+
   // Login/Register form states
   const [isLoginMode, setIsLoginMode] = useState(true);
   const [loginFormData, setLoginFormData] = useState({
@@ -62,7 +62,7 @@ const Donations = () => {
   const [authErrors, setAuthErrors] = useState({});
   const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-  
+
   // --- Multistep Registration State ---
   const [registrationStep, setRegistrationStep] = useState(1);
   const [gender, setGender] = useState('');
@@ -156,7 +156,7 @@ const Donations = () => {
         email: donorData.email,
         phone: donorData.phone,
       });
-      
+
       // If user is not authenticated, prompt for session creation
       if (!isAuthenticated && donor?.id) {
         setPendingDonorId(donor.id);
@@ -165,7 +165,7 @@ const Donations = () => {
         // User is authenticated or no donor ID, proceed to donation
         setCurrentStep('donation');
       }
-      
+
       setRegistrationStep(1);
       setGender('');
       setCountry('Nigeria');
@@ -225,7 +225,7 @@ const Donations = () => {
       console.log('Searching alumni with:', { regNumber, email: searchEmail, phone: searchPhone });
       const result = await searchAlumni({ regNumber, email: searchEmail, phone: searchPhone });
       console.log('Search result:', result);
-      
+
       if (result.success) {
         setAlumniData(result.donor);
         setDonationData({
@@ -245,7 +245,7 @@ const Donations = () => {
       }
     } catch (error) {
       console.error('Alumni search error:', error);
-      
+
       // More detailed error handling
       if (error.response?.status === 404) {
         toast.error('Alumni record not found. Please check your registration number.');
@@ -256,7 +256,7 @@ const Donations = () => {
       } else {
         toast.error('Error searching for alumni. Please try again.');
       }
-      
+
       // TEMPORARILY DISABLED: Don't redirect, stay on search page
       // setCurrentStep('donation');
     } finally {
@@ -267,7 +267,7 @@ const Donations = () => {
   // Handle registration
   const handleRegistration = async (e) => {
     e.preventDefault();
-    
+
     const donorData = {
       name: donationData.name,
       email: donationData.email,
@@ -284,7 +284,7 @@ const Donations = () => {
   // Handle alumni update
   const handleAlumniUpdate = async (e) => {
     e.preventDefault();
-    
+
     if (!alumniData) {
       toast.error('No alumni data found');
       return;
@@ -321,10 +321,10 @@ const Donations = () => {
     console.log('Full updateData:', JSON.stringify(updateData, null, 2));
 
     const result = await updateDonor(alumniData.id, updateData);
-    
+
     if (result.success) {
       const donor = result.donor || alumniData;
-      
+
       // If user is not authenticated, prompt for session creation
       if (!isAuthenticated && donor?.id) {
         setPendingDonorId(donor.id);
@@ -340,7 +340,7 @@ const Donations = () => {
   // Handle payment submission
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!donationData.amount || donationData.amount < 100) {
       toast.error('Please enter a valid amount (minimum ₦100)');
       return;
@@ -357,10 +357,10 @@ const Donations = () => {
     // Note: Phone validation will be handled by backend
     // We'll proceed with payment and handle phone errors from backend response
     setProcessingPayment(true);
-    
+
     try {
       await getCsrfCookie();
-      
+
       // Prepare metadata with separate name fields from user data
       // Include phone as empty string to satisfy backend validation (backend may require the field even if empty)
       // Note: Email is sent in paymentData.email (top level) for Paystack, not in metadata
@@ -379,16 +379,16 @@ const Donations = () => {
         metadata.project_id = selectedProject.id;
         metadata.project_title = selectedProject.project_title;
       }
-      
+
       // Convert amount to number (backend expects numeric, min:100 in naira)
       const amountInNaira = parseFloat(donationData.amount) || 0;
-      
+
       if (amountInNaira < 100) {
         toast.error('Minimum donation amount is ₦100');
         setProcessingPayment(false);
         return;
       }
-      
+
       const paymentData = {
         email: user.email || '',
         amount: amountInNaira, // Send amount in naira as number (backend will convert to kobo for Paystack)
@@ -396,32 +396,40 @@ const Donations = () => {
         callback_url: `${window.location.origin}/donations`,
         metadata: metadata
       };
-      
+
       console.log('Payment data with donor_id:', {
         email: paymentData.email,
         donor_id: metadata.donor_id,
         user_id: user.id,
         authenticated: isAuthenticated
       });
-      
+
       console.log('Initializing Paystack payment:', paymentData);
       console.log('Amount in Naira:', amountInNaira);
-      
+
       const response = await paymentsAPI.initialize(paymentData);
 
-      const { access_code } = response.data.data;
-      
+      const { access_code, authorization_url } = response.data.data;
+
       // Load Paystack script
       await loadPaystackScript();
-      
-      // Open Paystack payment popup
-      const popup = new window.PaystackPop();
-      popup.resumeTransaction(access_code, {
-        onSuccess: (response) => {
+
+      // Open Paystack payment popup using v2 API
+      const paystack = window.PaystackPop.setup({
+        key: process.env.REACT_APP_PAYSTACK_PUBLIC_KEY || 'pk_test_your_key_here', // You should set this in .env
+        email: paymentData.email,
+        amount: amountInNaira * 100, // Convert to kobo
+        ref: response.data.data.reference, // Use the reference from backend
+        metadata: metadata,
+        onClose: function () {
+          console.log('Paystack popup closed');
+          setProcessingPayment(false);
+        },
+        callback: function (response) {
           // Payment successful - verify immediately with backend
           console.log('Paystack payment successful:', response);
           const reference = response.reference || response.trxref;
-          
+
           if (reference) {
             // Verify payment with backend immediately
             console.log('Verifying payment immediately with reference:', reference);
@@ -429,25 +437,25 @@ const Donations = () => {
               .then(verifyResponse => {
                 console.log('Immediate verification response:', verifyResponse.data);
                 const verifyData = verifyResponse.data.data || verifyResponse.data;
-                
+
                 // Check both status and gateway_response
-                const isSuccess = verifyResponse.data.success || 
-                                verifyData?.status === 'success' ||
-                                (verifyData?.gateway_response && 
-                                 verifyData.gateway_response.toLowerCase() === 'successful');
-                
+                const isSuccess = verifyResponse.data.success ||
+                  verifyData?.status === 'success' ||
+                  (verifyData?.gateway_response &&
+                    verifyData.gateway_response.toLowerCase() === 'successful');
+
                 if (isSuccess) {
                   const projectName = selectedProject?.project_title || 'the Endowment Fund';
                   const amount = verifyData?.amount ? verifyData.amount / 100 : amountInNaira;
-                  
+
                   // Store thank you data
                   sessionStorage.setItem('donationThankYou', JSON.stringify({
                     project: projectName,
                     amount: amount
                   }));
-                  
+
                   toast.success('Payment verified successfully! 🎉');
-                  
+
                   // Redirect to home using React Router to preserve authentication state
                   setTimeout(() => {
                     navigate('/', { replace: true });
@@ -456,14 +464,14 @@ const Donations = () => {
                   // Verification didn't confirm success, but payment was made
                   console.warn('Payment made but verification unclear:', verifyData);
                   toast.success('Payment received! Verification in progress...');
-                  
+
                   // Still redirect - webhook will handle final verification
                   const projectName = selectedProject?.project_title || 'the Endowment Fund';
                   sessionStorage.setItem('donationThankYou', JSON.stringify({
                     project: projectName,
                     amount: amountInNaira
                   }));
-                  
+
                   setTimeout(() => {
                     navigate('/', { replace: true });
                   }, 500);
@@ -474,13 +482,13 @@ const Donations = () => {
                 // Payment was successful in Paystack, but verification failed
                 // Still proceed - webhook will handle verification
                 toast.success('Payment received! Verification in progress...');
-                
+
                 const projectName = selectedProject?.project_title || 'the Endowment Fund';
                 sessionStorage.setItem('donationThankYou', JSON.stringify({
                   project: projectName,
                   amount: amountInNaira
                 }));
-                
+
                 setTimeout(() => {
                   navigate('/', { replace: true });
                 }, 500);
@@ -493,47 +501,44 @@ const Donations = () => {
               project: projectName,
               amount: amountInNaira
             }));
-            
+
             setTimeout(() => {
               navigate('/', { replace: true });
             }, 500);
           }
-        },
-        onClose: () => {
-          // If popup is closed, check if payment was successful via callback URL
-          console.log('Paystack popup closed');
-          // The callback URL handler in useEffect will check for reference parameter
         }
       });
-      
+
+      paystack.openIframe();
+
       // After payment, redirect will be handled by Paystack callback
       // The webhook will handle the donation record creation
-      
+
     } catch (error) {
       console.error('Payment error:', error);
       console.error('Payment error response:', error.response?.data);
       console.error('Payment error status:', error.response?.status);
-      
+
       if (error.response?.status === 500) {
         toast.error('Server error during payment initialization. Please check backend logs.');
       } else if (error.response?.status === 422) {
         const validationErrors = error.response?.data?.errors || {};
         console.error('Validation errors details:', validationErrors);
-        
+
         // Handle validation errors
         if (Object.keys(validationErrors).length > 0) {
           // Check if it's a phone error - backend still requires phone field
-          const phoneError = validationErrors.phone || 
-                            validationErrors['metadata.phone'] || 
-                            validationErrors['metadata.phone.0'];
-          
+          const phoneError = validationErrors.phone ||
+            validationErrors['metadata.phone'] ||
+            validationErrors['metadata.phone.0'];
+
           if (phoneError) {
             // Backend requires phone but we're sending empty string
             // This means backend validation needs to be updated to make phone optional
             console.error('Backend phone validation error:', phoneError);
             toast.error(
-              'Backend validation error: Phone field is required by the backend. Please update backend to make phone optional for donations.', 
-              { 
+              'Backend validation error: Phone field is required by the backend. Please update backend to make phone optional for donations.',
+              {
                 duration: 8000,
                 icon: '⚠️'
               }
@@ -569,7 +574,7 @@ const Donations = () => {
       }
 
       const script = document.createElement('script');
-      script.src = 'https://js.paystack.co/v1/inline.js';
+      script.src = 'https://js.paystack.co/v2/inline.js';
       script.onload = resolve;
       script.onerror = reject;
       document.head.appendChild(script);
@@ -582,53 +587,53 @@ const Donations = () => {
     const reference = params.get('reference');
     const trxref = params.get('trxref'); // Paystack reference
     const paymentRef = reference || trxref;
-    
+
     if (paymentRef) {
       console.log('Payment reference detected:', paymentRef);
-      
+
       // Get project from URL params or current state
       const urlProject = params.get('project');
       const projectFromUrl = urlProject ? decodeURIComponent(urlProject) : null;
-      
+
       // Payment completed - verify with backend
       console.log('Verifying payment with reference:', paymentRef);
       paymentsAPI.verify(paymentRef)
         .then(response => {
           console.log('Payment verification response:', response.data);
           const paymentData = response.data.data || response.data;
-          
+
           // Check both status and gateway_response as per backend guide
-          const isSuccess = response.data.success || 
-                          paymentData?.status === 'success' ||
-                          (paymentData?.gateway_response && 
-                           paymentData.gateway_response.toLowerCase() === 'successful');
-          
+          const isSuccess = response.data.success ||
+            paymentData?.status === 'success' ||
+            (paymentData?.gateway_response &&
+              paymentData.gateway_response.toLowerCase() === 'successful');
+
           console.log('Payment verification result:', {
             isSuccess,
             status: paymentData?.status,
             gateway_response: paymentData?.gateway_response,
             responseSuccess: response.data.success
           });
-          
+
           if (isSuccess) {
             // Get amount from payment response or fallback
             const amount = paymentData?.amount ? paymentData.amount / 100 : (donationData?.amount || 0);
-            
+
             // Get project name from payment metadata, URL, or fallback
             const projectFromMetadata = paymentData?.metadata?.project_title || paymentData?.metadata?.project;
             const projectName = projectFromMetadata || projectFromUrl || selectedProject?.project_title || 'the Endowment Fund';
-            
+
             toast.success(`Thank you! Your donation has been processed successfully! 🎉`);
-            
+
             // Clean URL first
             window.history.replaceState({}, document.title, window.location.pathname);
-            
+
             // Store thank you data in sessionStorage for home page to pick up (more reliable than navigate state)
             sessionStorage.setItem('donationThankYou', JSON.stringify({
               project: projectName,
               amount: amount
             }));
-            
+
             // Redirect to home using React Router to preserve authentication state
             setTimeout(() => {
               navigate('/', { replace: true });
@@ -642,16 +647,16 @@ const Donations = () => {
           console.error('Payment verification error:', error);
           // Still show success and redirect - webhook will handle verification
           toast.success('Thank you! Your payment is being processed. You will receive a confirmation shortly.');
-          
+
           // Get project name from URL or fallback
           const urlProject = params.get('project');
           const projectFromUrl = urlProject ? decodeURIComponent(urlProject) : null;
           const projectName = projectFromUrl || selectedProject?.project_title || 'the Endowment Fund';
           const amount = donationData?.amount || 0;
-          
+
           // Clean URL
           window.history.replaceState({}, document.title, window.location.pathname);
-          
+
           // Redirect to home using React Router to preserve authentication state
           setTimeout(() => {
             // Store thank you data in sessionStorage for home page to pick up
@@ -689,7 +694,7 @@ const Donations = () => {
       }, 1000); // Increased delay to 1 second for session restoration
       return () => clearTimeout(timer);
     }
-    
+
     // If user becomes authenticated, ensure we're on donation step
     if (!loading && isAuthenticated && currentStep === 'login-register') {
       setCurrentStep('donation');
@@ -712,13 +717,13 @@ const Donations = () => {
     e.preventDefault();
     setAuthErrors({});
     setIsAuthSubmitting(true);
-    
+
     try {
       const result = await login({
         username: loginFormData.email.trim(),
         password: loginFormData.password
       });
-      
+
       if (result.success) {
         toast.success('Login successful!');
         await checkSession();
@@ -749,19 +754,19 @@ const Donations = () => {
   const handleRegister = async (e) => {
     e.preventDefault();
     setAuthErrors({});
-    
+
     if (registerFormData.password !== registerFormData.password_confirmation) {
       setAuthErrors({ password_confirmation: 'Passwords do not match' });
       return;
     }
-    
+
     if (registerFormData.password.length < 6) {
       setAuthErrors({ password: 'Password must be at least 6 characters' });
       return;
     }
-    
+
     setIsAuthSubmitting(true);
-    
+
     try {
       // First, create a minimal donor record if it doesn't exist
       let donorId = null;
@@ -787,18 +792,18 @@ const Donations = () => {
           }
         }
       }
-      
+
       if (!donorId) {
         throw new Error('Failed to create or find donor record');
       }
-      
+
       // Now register the session
       const result = await register({
         username: registerFormData.email.trim(),
         password: registerFormData.password,
         donor_id: donorId
       });
-      
+
       if (result.success) {
         toast.success('Registration successful!');
         await checkSession();
@@ -831,12 +836,12 @@ const Donations = () => {
     try {
       // Try register first
       let result = await googleRegister(idToken);
-      
+
       // If account exists, try login
       if (!result.success && result.error?.response?.status === 409) {
         result = await googleLogin(idToken);
       }
-      
+
       if (result.success) {
         toast.success('Google authentication successful!');
         await checkSession();
@@ -867,7 +872,7 @@ const Donations = () => {
       toast.error('User information not available');
       return;
     }
-    
+
     try {
       const result = await updateDonor(user.id, { donor_type: donorType });
       if (result.success) {
@@ -904,7 +909,7 @@ const Donations = () => {
             <div className="flex items-center justify-center mb-4">
               <img src={abuLogo} alt="ABU Logo" className="h-16 w-auto" />
               <div className="flex flex-col justify-center ml-3 h-16 text-left">
-                <span className="text-sm font-bold leading-tight text-gray-800" style={{lineHeight: '1.1'}}>ABU Endowment</span>
+                <span className="text-sm font-bold leading-tight text-gray-800" style={{ lineHeight: '1.1' }}>ABU Endowment</span>
                 <span className="text-xs font-bold text-gray-800 leading-none">& Crowd Funding</span>
               </div>
             </div>
@@ -930,10 +935,9 @@ const Donations = () => {
                     type="email"
                     id="loginEmail"
                     value={loginFormData.email}
-                    onChange={(e) => setLoginFormData({...loginFormData, email: e.target.value})}
-                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all ${
-                      authErrors.email ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    onChange={(e) => setLoginFormData({ ...loginFormData, email: e.target.value })}
+                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all ${authErrors.email ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     placeholder="Enter your email"
                     required
                     disabled={isAuthSubmitting}
@@ -956,10 +960,9 @@ const Donations = () => {
                     type="password"
                     id="loginPassword"
                     value={loginFormData.password}
-                    onChange={(e) => setLoginFormData({...loginFormData, password: e.target.value})}
-                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all ${
-                      authErrors.password ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    onChange={(e) => setLoginFormData({ ...loginFormData, password: e.target.value })}
+                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all ${authErrors.password ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     placeholder="Enter your password"
                     required
                     disabled={isAuthSubmitting}
@@ -1005,10 +1008,9 @@ const Donations = () => {
                     type="email"
                     id="registerEmail"
                     value={registerFormData.email}
-                    onChange={(e) => setRegisterFormData({...registerFormData, email: e.target.value})}
-                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all ${
-                      authErrors.email ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    onChange={(e) => setRegisterFormData({ ...registerFormData, email: e.target.value })}
+                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all ${authErrors.email ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     placeholder="Enter your email"
                     required
                     disabled={isAuthSubmitting}
@@ -1032,10 +1034,9 @@ const Donations = () => {
                       type="password"
                       id="registerPassword"
                       value={registerFormData.password}
-                      onChange={(e) => setRegisterFormData({...registerFormData, password: e.target.value})}
-                      className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all ${
-                        authErrors.password ? 'border-red-500' : 'border-gray-300'
-                      }`}
+                      onChange={(e) => setRegisterFormData({ ...registerFormData, password: e.target.value })}
+                      className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all ${authErrors.password ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       placeholder="Password"
                       required
                       disabled={isAuthSubmitting}
@@ -1058,10 +1059,9 @@ const Donations = () => {
                       type="password"
                       id="registerPasswordConfirmation"
                       value={registerFormData.password_confirmation}
-                      onChange={(e) => setRegisterFormData({...registerFormData, password_confirmation: e.target.value})}
-                      className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all ${
-                        authErrors.password_confirmation ? 'border-red-500' : 'border-gray-300'
-                      }`}
+                      onChange={(e) => setRegisterFormData({ ...registerFormData, password_confirmation: e.target.value })}
+                      className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-all ${authErrors.password_confirmation ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       placeholder="Confirm"
                       required
                       disabled={isAuthSubmitting}
@@ -1145,7 +1145,7 @@ const Donations = () => {
             <div className="flex items-center justify-center mb-4">
               <img src={abuLogo} alt="ABU Logo" className="h-16 w-auto" />
               <div className="flex flex-col justify-center ml-3 h-16 text-left">
-                <span className="text-sm font-bold leading-tight text-gray-800" style={{lineHeight: '1.1'}}>ABU Endowment</span>
+                <span className="text-sm font-bold leading-tight text-gray-800" style={{ lineHeight: '1.1' }}>ABU Endowment</span>
                 <span className="text-xs font-bold text-gray-800 leading-none">& Crowd Funding</span>
               </div>
             </div>
@@ -1281,7 +1281,7 @@ const Donations = () => {
                 <input
                   type="text"
                   value={donationData.name}
-                  onChange={(e) => setDonationData({...donationData, name: e.target.value})}
+                  onChange={(e) => setDonationData({ ...donationData, name: e.target.value })}
                   required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Enter your full name"
@@ -1306,7 +1306,7 @@ const Donations = () => {
                 <input
                   type="email"
                   value={donationData.email}
-                  onChange={(e) => setDonationData({...donationData, email: e.target.value})}
+                  onChange={(e) => setDonationData({ ...donationData, email: e.target.value })}
                   required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Enter your email"
@@ -1317,7 +1317,7 @@ const Donations = () => {
                 <input
                   type="tel"
                   value={donationData.phone}
-                  onChange={(e) => setDonationData({...donationData, phone: e.target.value})}
+                  onChange={(e) => setDonationData({ ...donationData, phone: e.target.value })}
                   required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Enter your phone number"
@@ -1435,7 +1435,7 @@ const Donations = () => {
         donorId={pendingDonorId}
         onSuccess={handleSessionCreated}
       />
-      
+
       {/* Auth Modal */}
       <AuthModal
         isOpen={showAuthModal}
@@ -1522,7 +1522,7 @@ const Donations = () => {
               <input
                 type="number"
                 value={donationData.amount}
-                onChange={(e) => setDonationData({...donationData, amount: e.target.value})}
+                onChange={(e) => setDonationData({ ...donationData, amount: e.target.value })}
                 required
                 min="100"
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -1536,10 +1536,10 @@ const Donations = () => {
               className="w-full py-3 rounded-lg font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 transition-all duration-200 flex items-center justify-center gap-2"
             >
               <FaCreditCard className="w-5 h-5" />
-              {processingPayment ? 'Processing...' : 
-               !isAuthenticated ? 'Please Login or Register' :
-               alumniData ? 'Update & Continue' : 
-               `Pay ${formatNaira(donationData.amount)} ${isEndowment ? 'to Endowment' : 'to Project'}`
+              {processingPayment ? 'Processing...' :
+                !isAuthenticated ? 'Please Login or Register' :
+                  alumniData ? 'Update & Continue' :
+                    `Pay ${formatNaira(donationData.amount)} ${isEndowment ? 'to Endowment' : 'to Project'}`
               }
             </button>
           </form>

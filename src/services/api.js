@@ -24,7 +24,7 @@ api.interceptors.request.use(
     const sessionId = localStorage.getItem('donor_session_id');
     const token = localStorage.getItem('auth_token');
     const deviceSession = localStorage.getItem('device_session');
-    
+
     if (sessionId) {
       // Donor session authentication - session_id is sent in request body for /me endpoint
       // For other endpoints, we might need to add it as a header if backend requires it
@@ -52,7 +52,7 @@ api.interceptors.response.use(
       const isSessionCheck = error.config?.url?.includes('/donor-sessions/me') || error.config?.url?.includes('/check-device');
       // Don't redirect for notification or alumni list fetches - these are non-critical
       const isNonCriticalFetch = error.config?.url?.includes('/messages') || error.config?.url?.includes('/donors');
-      
+
       // CRITICAL: Don't clear session storage for session check endpoints - they're checking validity
       // Only clear if it's NOT a session check endpoint (session check might return 401 if expired, but we handle that in checkSession)
       if (!isSessionCheck) {
@@ -63,7 +63,7 @@ api.interceptors.response.use(
         localStorage.removeItem('donor_username');
         localStorage.removeItem('user');
         localStorage.removeItem('cached_user_data'); // Also clear cached user data
-        
+
         // Clear all cached donation totals
         Object.keys(localStorage).forEach(key => {
           if (key.startsWith('abu_totalDonated_')) {
@@ -71,7 +71,7 @@ api.interceptors.response.use(
           }
         });
       }
-      
+
       // Only redirect if not already on auth pages, not a session check, and not a non-critical fetch
       // Also don't redirect if on home page (/) - allow unauthenticated access
       if (!isAuthPage && !isSessionCheck && !isNonCriticalFetch && currentPath !== '/') {
@@ -99,25 +99,25 @@ export const authAPI = {
 export const verificationAPI = {
   // Send SMS verification code
   sendSMSVerification: (phone) => api.post('/api/verification/send-sms', { phone }),
-  
+
   // Send email verification code
   sendEmailVerification: (email) => api.post('/api/verification/send-email', { email }),
-  
+
   // Verify SMS code
   verifySMSCode: (phone, code) => api.post('/api/verification/verify-sms', { phone, code }),
-  
+
   // Verify email code
   verifyEmailCode: (email, code) => api.post('/api/verification/verify-email', { email, code }),
-  
+
   // Create device session after verification
   createDeviceSession: (sessionData) => api.post('/api/session/create', sessionData),
-  
+
   // Check if device is recognized
   checkDeviceSession: (deviceInfo) => api.post('/api/session/check', deviceInfo),
-  
+
   // Login with device session
   loginWithDevice: (credentials) => api.post('/api/session/login', credentials),
-  
+
   // Logout device session
   logout: () => api.post('/api/session/logout'),
 };
