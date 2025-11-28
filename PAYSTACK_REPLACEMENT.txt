@@ -1,0 +1,99 @@
+// EXACT REPLACEMENT FOR LINES 414-512 in Donations.js
+// Copy this entire block and replace from line 414 to line 512
+
+      // Load Paystack script
+      await loadPaystackScript();
+      
+      // Open Paystack payment popup using current API
+      const handler = new window.PaystackPop();
+      
+      handler.newTransaction({
+        key: process.env.REACT_APP_PAYSTACK_PUBLIC_KEY || 'pk_test_your_key_here',
+        accessCode: access_code,
+        onSuccess: (transaction) => {
+          // Payment successful - verify immediately with backend
+          console.log('Paystack payment successful:', transaction);
+          const reference = transaction.reference || transaction.trxref;
+
+          if (reference) {
+            // Verify payment with backend immediately
+            console.log('Verifying payment immediately with reference:', reference);
+            paymentsAPI.verify(reference)
+              .then(verifyResponse => {
+                console.log('Immediate verification response:', verifyResponse.data);
+                const verifyData = verifyResponse.data.data || verifyResponse.data;
+
+                // Check both status and gateway_response
+                const isSuccess = verifyResponse.data.success ||
+                  verifyData?.status === 'success' ||
+                  (verifyData?.gateway_response &&
+                    verifyData.gateway_response.toLowerCase() === 'successful');
+
+                if (isSuccess) {
+                  const projectName = selectedProject?.project_title || 'the Endowment Fund';
+                  const amount = verifyData?.amount ? verifyData.amount / 100 : amountInNaira;
+
+                  // Store thank you data
+                  sessionStorage.setItem('donationThankYou', JSON.stringify({
+                    project: projectName,
+                    amount: amount
+                  }));
+
+                  toast.success('Payment verified successfully! 🎉');
+
+                  // Redirect to home using React Router to preserve authentication state
+                  setTimeout(() => {
+                    navigate('/', { replace: true });
+                  }, 500);
+                } else {
+                  // Verification didn't confirm success, but payment was made
+                  console.warn('Payment made but verification unclear:', verifyData);
+                  toast.success('Payment received! Verification in progress...');
+
+                  // Still redirect - webhook will handle final verification
+                  const projectName = selectedProject?.project_title || 'the Endowment Fund';
+                  sessionStorage.setItem('donationThankYou', JSON.stringify({
+                    project: projectName,
+                    amount: amountInNaira
+                  }));
+
+                  setTimeout(() => {
+                    navigate('/', { replace: true });
+                  }, 500);
+                }
+              })
+              .catch(error => {
+                console.error('Immediate verification error:', error);
+                // Payment was successful in Paystack, but verification failed
+                // Still proceed - webhook will handle verification
+                toast.success('Payment received! Verification in progress...');
+
+                const projectName = selectedProject?.project_title || 'the Endowment Fund';
+                sessionStorage.setItem('donationThankYou', JSON.stringify({
+                  project: projectName,
+                  amount: amountInNaira
+                }));
+
+                setTimeout(() => {
+                  navigate('/', { replace: true });
+                }, 500);
+              });
+          } else {
+            // No reference - fallback to callback URL handling
+            console.warn('No reference in Paystack response, relying on callback URL');
+            const projectName = selectedProject?.project_title || 'the Endowment Fund';
+            sessionStorage.setItem('donationThankYou', JSON.stringify({
+              project: projectName,
+              amount: amountInNaira
+            }));
+
+            setTimeout(() => {
+              navigate('/', { replace: true });
+            }, 500);
+          }
+        },
+        onCancel: () => {
+          console.log('Paystack popup closed');
+          setProcessingPayment(false);
+        }
+      });
