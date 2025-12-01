@@ -85,7 +85,7 @@ const Projects = () => {
     <div className="p-4 max-w-7xl mx-auto">
       <h1 className="text-3xl font-bold mb-6 text-gray-900">Endowment Projects</h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {projects.map((project) => {
           const projectImage = getProjectImage(project);
           const raisedAmount = Number(
@@ -159,8 +159,8 @@ const Projects = () => {
                   <div className="flex justify-between items-center mb-2">
                     <div className="flex items-center gap-2">
                       <div className={`w-2 h-2 rounded-full ${isCompleted ? 'bg-green-500' :
-                          isUrgent ? 'bg-red-500 animate-pulse' :
-                            'bg-gray-500 animate-pulse'
+                        isUrgent ? 'bg-red-500 animate-pulse' :
+                          'bg-gray-500 animate-pulse'
                         }`}></div>
                       <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Progress</span>
                     </div>
@@ -177,8 +177,8 @@ const Projects = () => {
                   <div className="w-full h-2.5 bg-gray-200 rounded-full overflow-hidden shadow-inner">
                     <div
                       className={`h-full rounded-full transition-all duration-500 relative overflow-hidden shadow-sm ${isCompleted
-                          ? 'bg-gradient-to-r from-green-500 via-green-600 to-emerald-600'
-                          : 'bg-gradient-to-r from-gray-500 via-gray-600 to-gray-700'
+                        ? 'bg-gradient-to-r from-green-500 via-green-600 to-emerald-600'
+                        : 'bg-gradient-to-r from-gray-500 via-gray-600 to-gray-700'
                         }`}
                       style={{ width: `${Math.max(progressPercentage, 2)}%` }}
                     >
@@ -189,12 +189,12 @@ const Projects = () => {
                   <div className="flex justify-between items-center mt-3">
                     <div>
                       <p className="text-[9px] text-gray-500 mb-0.5 uppercase tracking-wide">Raised</p>
-                      <p className="text-sm font-semibold text-gray-900">{formatNaira(raisedAmount)}</p>
+                      <p className="text-xs font-semibold text-gray-900">{formatNaira(raisedAmount)}</p>
                     </div>
                     {targetAmount > 0 && (
                       <div className="text-right">
                         <p className="text-[9px] text-gray-500 mb-0.5 uppercase tracking-wide">Target</p>
-                        <p className="text-sm font-semibold text-primary-600">{formatNaira(targetAmount)}</p>
+                        <p className="text-xs font-semibold text-primary-600">{formatNaira(targetAmount)}</p>
                       </div>
                     )}
                   </div>

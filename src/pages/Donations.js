@@ -39,6 +39,7 @@ const Donations = () => {
     phone: ''
   });
   const [processingPayment, setProcessingPayment] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
   const [projectDetails, setProjectDetails] = useState(null);
 
   // Alumni search states
@@ -456,6 +457,9 @@ const Donations = () => {
 
                   toast.success('Payment verified successfully! 🎉');
 
+                  // Show loading state before redirect
+                  setRedirecting(true);
+
                   // Redirect to home using React Router to preserve authentication state
                   setTimeout(() => {
                     navigate('/', { replace: true });
@@ -471,6 +475,9 @@ const Donations = () => {
                     project: projectName,
                     amount: amountInNaira
                   }));
+
+                  // Show loading state before redirect
+                  setRedirecting(true);
 
                   setTimeout(() => {
                     navigate('/', { replace: true });
@@ -489,6 +496,9 @@ const Donations = () => {
                   amount: amountInNaira
                 }));
 
+                // Show loading state before redirect
+                setRedirecting(true);
+
                 setTimeout(() => {
                   navigate('/', { replace: true });
                 }, 500);
@@ -501,6 +511,9 @@ const Donations = () => {
               project: projectName,
               amount: amountInNaira
             }));
+
+            // Show loading state before redirect
+            setRedirecting(true);
 
             setTimeout(() => {
               navigate('/', { replace: true });
@@ -1550,6 +1563,26 @@ const Donations = () => {
 
         </div>
       </div>
+
+      {/* Full-page loading overlay for redirect */}
+      {redirecting && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-2xl p-8 max-w-md mx-4 text-center shadow-2xl">
+            <div className="flex justify-center mb-4">
+              <FaSpinner className="w-16 h-16 text-blue-600 animate-spin" />
+            </div>
+            <h3 className="text-2xl font-bold text-gray-900 mb-2">Processing Payment...</h3>
+            <p className="text-gray-600 mb-4">
+              Please wait while we verify your payment and redirect you to the home page.
+            </p>
+            <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+              <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
+              <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+              <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
