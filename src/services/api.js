@@ -186,47 +186,32 @@ export const donorSessionsAPI = {
   login: (credentials) => api.post('/api/donor-sessions/login', credentials),
   logout: () => api.post('/api/donor-sessions/logout'),
   getCurrentSession: (sessionId) => api.post('/api/donor-sessions/me', { session_id: sessionId }),
-  checkDevice: () => api.get('/api/donor-sessions/check-device'),
-  updateUsername: (sessionId, username) => api.put(`/api/donor-sessions/${sessionId}/username`, { username }),
-  updatePassword: (sessionId, passwordData) => api.put(`/api/donor-sessions/${sessionId}/password`, passwordData),
-  googleLogin: (data) => api.post('/api/donor-sessions/google-login', data),
-  googleRegister: (data) => api.post('/api/donor-sessions/google-register', data),
-  // Forgot Password endpoints
-  requestPasswordReset: (email) => api.post('/api/donor-sessions/forgot-password', {
-    email,
-    reset_url: `${window.location.origin}/reset-password`
-  }),
-  validateResetToken: (token) => api.get(`/api/donor-sessions/reset/${token}`),
-  resetPasswordWithToken: (token, password, password_confirmation) =>
-    api.post(`/api/donor-sessions/reset/${token}`, { password, password_confirmation }),
-};
+  // Utility functions
+  export const formatNaira = (amount) => {
+    if (amount == null) amount = 0;
+    return new Intl.NumberFormat('en-NG', {
+      style: 'currency',
+      currency: 'NGN',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  };
 
-// Utility functions
-export const formatNaira = (amount) => {
-  if (amount == null) amount = 0;
-  return new Intl.NumberFormat('en-NG', {
-    style: 'currency',
-    currency: 'NGN',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
-};
+  export const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-NG', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
 
-export const formatDate = (dateString) => {
-  return new Date(dateString).toLocaleDateString('en-NG', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
-};
+  // Utility to get the base URL for images (strip trailing /api if present)
+  export const getBaseUrl = () => {
+    // Normalize without trailing slash
+    const base = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
+    // If base ends with /api, strip it to get the app root
+    const root = base.endsWith('/api') ? base.slice(0, -4) : base;
+    return root.endsWith('/') ? root : root + '/';
+  };
 
-// Utility to get the base URL for images (strip trailing /api if present)
-export const getBaseUrl = () => {
-  // Normalize without trailing slash
-  const base = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
-  // If base ends with /api, strip it to get the app root
-  const root = base.endsWith('/api') ? base.slice(0, -4) : base;
-  return root.endsWith('/') ? root : root + '/';
-};
-
-export default api;
+  export default api;
