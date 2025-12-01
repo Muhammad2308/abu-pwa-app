@@ -4,46 +4,30 @@ import { getDeviceFingerprint } from '../utils/deviceFingerprint';
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000';
 
 // Create axios instance with base configuration
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  withCredentials: true, // This is correct!
-  headers: {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json',
-    'X-Device-Fingerprint': getDeviceFingerprint(),
-    const isSessionCheck = error.config?.url?.includes('/donor-sessions/me') || error.config?.url?.includes('/check-device');
-    // Don't redirect for notification or alumni list fetches - these are non-critical
-    const isNonCriticalFetch = error.config?.url?.includes('/messages') || error.config?.url?.includes('/donors');
+localStorage.removeItem('device_session');
+localStorage.removeItem('donor_session_id');
+localStorage.removeItem('donor_username');
+localStorage.removeItem('user');
+localStorage.removeItem('cached_user_data'); // Also clear cached user data
 
-    // CRITICAL: Don't clear session storage for session check endpoints - they're checking validity
-    // Only clear if it's NOT a session check endpoint (session check might return 401 if expired, but we handle that in checkSession)
-    if(!isSessionCheck) {
-      // Clear all auth-related storage
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('device_session');
-      localStorage.removeItem('donor_session_id');
-      localStorage.removeItem('donor_username');
-      localStorage.removeItem('user');
-      localStorage.removeItem('cached_user_data'); // Also clear cached user data
-
-      // Clear all cached donation totals
-      Object.keys(localStorage).forEach(key => {
-        if (key.startsWith('abu_totalDonated_')) {
-          localStorage.removeItem(key);
-        }
-      });
+// Clear all cached donation totals
+Object.keys(localStorage).forEach(key => {
+  if (key.startsWith('abu_totalDonated_')) {
+    localStorage.removeItem(key);
+  }
+});
     }
 
-        // Only redirect if not already on auth pages, not a session check, and not a non-critical fetch
-        // Also don't redirect if on home page (/) - allow unauthenticated access
-        if(!isAuthPage && !isSessionCheck && !isNonCriticalFetch && currentPath !== '/') {
-    // Use a small delay to prevent redirect loops
-    setTimeout(() => {
-      if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
-        window.location.href = '/login';
-      }
-    }, 100);
-        }
+// Only redirect if not already on auth pages, not a session check, and not a non-critical fetch
+// Also don't redirect if on home page (/) - allow unauthenticated access
+if (!isAuthPage && !isSessionCheck && !isNonCriticalFetch && currentPath !== '/') {
+  // Use a small delay to prevent redirect loops
+  setTimeout(() => {
+    if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
+      window.location.href = '/login';
+    }
+  }, 100);
+}
       }
 return Promise.reject(error);
     }
