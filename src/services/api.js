@@ -11,58 +11,41 @@ const api = axios.create({
     'Content-Type': 'application/json',
     'Accept': 'application/json',
     'X-Device-Fingerprint': getDeviceFingerprint(),
-  },
-});
+    const isSessionCheck = error.config?.url?.includes('/donor-sessions/me') || error.config?.url?.includes('/check-device');
+    // Don't redirect for notification or alumni list fetches - these are non-critical
+    const isNonCriticalFetch = error.config?.url?.includes('/messages') || error.config?.url?.includes('/donors');
 
-// New function to get the CSRF cookie from Sanctum
-export const getCsrfCookie = () => api.get('/sanctum/csrf-cookie');
+    // CRITICAL: Don't clear session storage for session check endpoints - they're checking validity
+    // Only clear if it's NOT a session check endpoint (session check might return 401 if expired, but we handle that in checkSession)
+    if(!isSessionCheck) {
+      // Clear all auth-related storage
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('device_session');
+      localStorage.removeItem('donor_session_id');
+      localStorage.removeItem('donor_username');
+      localStorage.removeItem('user');
+      localStorage.removeItem('cached_user_data'); // Also clear cached user data
 
-// Request interceptor to add auth token
-api.interceptors.request.use(
-
-  // Response interceptor to handle auth errors
-  api.interceptors.response.use(
-    (response) => response,
-    (error) => {
-      if (error.response?.status === 401) {
-        const currentPath = window.location.pathname;
-        // Don't redirect if already on auth pages or if it's a session check endpoint
-        const isAuthPage = currentPath.includes('/login') || currentPath.includes('/register') || currentPath.includes('/forgot-password') || currentPath.includes('/reset-password');
-        const isSessionCheck = error.config?.url?.includes('/donor-sessions/me') || error.config?.url?.includes('/check-device');
-        // Don't redirect for notification or alumni list fetches - these are non-critical
-        const isNonCriticalFetch = error.config?.url?.includes('/messages') || error.config?.url?.includes('/donors');
-
-        // CRITICAL: Don't clear session storage for session check endpoints - they're checking validity
-        // Only clear if it's NOT a session check endpoint (session check might return 401 if expired, but we handle that in checkSession)
-        if (!isSessionCheck) {
-          // Clear all auth-related storage
-          localStorage.removeItem('auth_token');
-          localStorage.removeItem('device_session');
-          localStorage.removeItem('donor_session_id');
-          localStorage.removeItem('donor_username');
-          localStorage.removeItem('user');
-          localStorage.removeItem('cached_user_data'); // Also clear cached user data
-
-          // Clear all cached donation totals
-          Object.keys(localStorage).forEach(key => {
-            if (key.startsWith('abu_totalDonated_')) {
-              localStorage.removeItem(key);
-            }
-          });
+      // Clear all cached donation totals
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('abu_totalDonated_')) {
+          localStorage.removeItem(key);
         }
+      });
+    }
 
         // Only redirect if not already on auth pages, not a session check, and not a non-critical fetch
         // Also don't redirect if on home page (/) - allow unauthenticated access
-        if (!isAuthPage && !isSessionCheck && !isNonCriticalFetch && currentPath !== '/') {
-          // Use a small delay to prevent redirect loops
-          setTimeout(() => {
-            if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
-              window.location.href = '/login';
-            }
-          }, 100);
+        if(!isAuthPage && !isSessionCheck && !isNonCriticalFetch && currentPath !== '/') {
+    // Use a small delay to prevent redirect loops
+    setTimeout(() => {
+      if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
+        window.location.href = '/login';
+      }
+    }, 100);
         }
       }
-      return Promise.reject(error);
+return Promise.reject(error);
     }
   );
 
