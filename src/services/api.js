@@ -1,44 +1,4 @@
-import axios from 'axios';
-import { getDeviceFingerprint } from '../utils/deviceFingerprint';
-
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000';
-
-// Create axios instance with base configuration
-localStorage.removeItem('device_session');
-localStorage.removeItem('donor_session_id');
-localStorage.removeItem('donor_username');
-localStorage.removeItem('user');
-localStorage.removeItem('cached_user_data'); // Also clear cached user data
-
-// Clear all cached donation totals
-Object.keys(localStorage).forEach(key => {
-  if (key.startsWith('abu_totalDonated_')) {
-    localStorage.removeItem(key);
-  }
-});
-    }
-
-// Only redirect if not already on auth pages, not a session check, and not a non-critical fetch
-// Also don't redirect if on home page (/) - allow unauthenticated access
-if (!isAuthPage && !isSessionCheck && !isNonCriticalFetch && currentPath !== '/') {
-  // Use a small delay to prevent redirect loops
-  setTimeout(() => {
-    if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
-      window.location.href = '/login';
-    }
-  }, 100);
-}
-      }
-return Promise.reject(error);
-    }
-  );
-
-// Authentication API calls
-export const authAPI = {
-  login: (credentials) => api.post('/api/login', credentials),
-  register: (userData) => api.post('/api/register', userData),
-  logout: () => api.post('/api/logout'),
-  user: () => api.get('/api/user'),
+user: () => api.get('/api/user'),
 };
 
 // Verification API calls
