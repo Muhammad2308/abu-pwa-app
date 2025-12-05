@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import api from '../services/api';
 import { donorSessionsAPI } from '../services/api';
@@ -18,7 +19,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isDeviceRecognized, setIsDeviceRecognized] = useState(false);
-  
+
   // Donor session authentication state
   const [sessionId, setSessionId] = useState(null);
   const [username, setUsername] = useState(null);
@@ -103,17 +104,17 @@ export const AuthProvider = ({ children }) => {
         // Now verify session with backend in the background
         try {
           const response = await donorSessionsAPI.getCurrentSession(parseInt(storedSessionId));
-          
+
           if (response.data?.success && response.data?.data) {
             const sessionData = response.data.data;
             // Handle different response structures for donor data
             const donorData = sessionData.donor || sessionData.data?.donor || response.data.data?.donor;
-            
+
             console.log('checkSession - Full response:', response.data);
             console.log('checkSession - Session data:', sessionData);
             console.log('checkSession - Donor data:', donorData);
             console.log('checkSession - Profile image:', donorData?.profile_image);
-            
+
             // Update with fresh data from backend
             setSessionId(storedSessionId);
             setUsername(sessionData.username || storedUsername);
@@ -121,10 +122,10 @@ export const AuthProvider = ({ children }) => {
             setIsAuthenticated(true);
             setIsDeviceRecognized(true);
             setHasDonorSession(true);
-            
+
             // Update cache with fresh data
             cacheUserData(donorData, sessionData.username || storedUsername);
-            
+
             if (sessionData.device_session_id) {
               setDeviceSessionId(sessionData.device_session_id);
             }
@@ -139,7 +140,7 @@ export const AuthProvider = ({ children }) => {
           }
         } catch (verifyError) {
           console.error('Session verification error:', verifyError);
-          
+
           // Only clear session if it's a 401 (unauthorized), not for other errors
           if (verifyError.response?.status === 401) {
             // Session invalid or expired, clear storage and cache
@@ -168,7 +169,7 @@ export const AuthProvider = ({ children }) => {
       // Fallback: if we have a session ID, keep user logged in optimistically
       const storedSessionId = localStorage.getItem('donor_session_id');
       const storedUsername = localStorage.getItem('donor_username');
-      
+
       if (storedSessionId) {
         // Try to use cached data if available
         const cachedData = getCachedUserData();
@@ -201,11 +202,11 @@ export const AuthProvider = ({ children }) => {
     try {
       // Use the new check-device endpoint that returns both device and donor session status
       const response = await donorSessionsAPI.checkDevice();
-      
+
       if (response.data?.success && response.data?.recognized) {
         // Device is recognized - but user is NOT authenticated yet
         setIsDeviceRecognized(true);
-        
+
         // Only set user if they have an active donor session (authenticated)
         // Otherwise, just store donor info for display purposes but don't set as authenticated
         if (response.data.has_donor_session && response.data.donor_session) {
@@ -219,7 +220,7 @@ export const AuthProvider = ({ children }) => {
           // Don't set user here - they need to register/login first
           setUser(null);
         }
-        
+
         if (response.data.device_session?.id) {
           setDeviceSessionId(response.data.device_session.id);
         }
@@ -247,7 +248,7 @@ export const AuthProvider = ({ children }) => {
   const checkDeviceRecognition = async () => {
     try {
       const response = await api.get('/api/device/check');
-      
+
       if (response.data.recognized) {
         // Device is recognized but user is NOT authenticated yet
         // Don't set user - they need to login/register first
@@ -279,19 +280,19 @@ export const AuthProvider = ({ children }) => {
         ...registerData,
         device_session_id: deviceSessionId || registerData.device_session_id || null,
       };
-      
+
       const response = await donorSessionsAPI.register(dataToSend);
-      
+
       if (response.data?.success && response.data?.data) {
         const { id: newSessionId, username: newUsername, donor, device_session_id } = response.data.data;
-        
+
         // Store session in localStorage
         localStorage.setItem('donor_session_id', newSessionId.toString());
         localStorage.setItem('donor_username', newUsername);
-        
+
         // Cache user data for optimistic restoration on refresh
         cacheUserData(donor, newUsername);
-        
+
         // Update state
         setSessionId(newSessionId.toString());
         setUsername(newUsername);
@@ -302,7 +303,7 @@ export const AuthProvider = ({ children }) => {
         if (device_session_id) {
           setDeviceSessionId(device_session_id);
         }
-        
+
         return { success: true, message: response.data.message || 'Registration successful' };
       } else {
         return { success: false, message: response.data?.message || 'Registration failed' };
@@ -310,33 +311,33 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Registration error:', error);
       console.error('Registration error response:', error.response?.data);
-      
+
       // Handle specific error codes
       if (error.response?.status === 422) {
         const validationErrors = error.response.data?.errors;
         if (validationErrors) {
           const errorMessages = Object.values(validationErrors).flat().join(', ');
-          return { 
-            success: false, 
+          return {
+            success: false,
             message: errorMessages,
             errors: validationErrors // Include errors object for field-level display
           };
         }
-        return { 
-          success: false, 
+        return {
+          success: false,
           message: error.response.data?.message || 'Validation failed',
           errors: error.response.data?.errors || {}
         };
       }
-      
+
       if (error.response?.status === 409) {
         return { success: false, message: error.response.data?.message || 'Donor already registered' };
       }
-      
+
       if (error.code === 'ERR_NETWORK') {
         return { success: false, message: 'Network error - please check your connection' };
       }
-      
+
       return { success: false, message: error.response?.data?.message || 'Registration failed' };
     }
   };
@@ -349,19 +350,19 @@ export const AuthProvider = ({ children }) => {
         ...credentials,
         device_session_id: deviceSessionId || credentials.device_session_id || null,
       };
-      
+
       const response = await donorSessionsAPI.login(dataToSend);
-      
+
       if (response.data?.success && response.data?.data) {
         const { session_id: newSessionId, username: newUsername, donor, device_session_id } = response.data.data;
-        
+
         // Store session in localStorage
         localStorage.setItem('donor_session_id', newSessionId.toString());
         localStorage.setItem('donor_username', newUsername);
-        
+
         // Cache user data for optimistic restoration on refresh
         cacheUserData(donor, newUsername);
-        
+
         // Update state
         setSessionId(newSessionId.toString());
         setUsername(newUsername);
@@ -372,32 +373,32 @@ export const AuthProvider = ({ children }) => {
         if (device_session_id) {
           setDeviceSessionId(device_session_id);
         }
-        
+
         return { success: true, message: response.data.message || 'Login successful' };
       } else {
         return { success: false, message: response.data?.message || 'Login failed' };
       }
     } catch (error) {
       console.error('Login error:', error);
-      
+
       // Handle specific error codes
       if (error.response?.status === 401) {
         // Check if it's a Google account trying to use email/password
         const errorMessage = error.response.data?.message || '';
         if (errorMessage.includes('Google') || errorMessage.includes('google')) {
-          return { 
-            success: false, 
+          return {
+            success: false,
             message: errorMessage || 'This account is registered with Google. Please use "Login with Google" instead.',
-            error: error 
+            error: error
           };
         }
-        return { 
-          success: false, 
+        return {
+          success: false,
           message: error.response.data?.message || 'Invalid credentials',
-          error: error 
+          error: error
         };
       }
-      
+
       if (error.response?.status === 422) {
         const validationErrors = error.response.data?.errors;
         if (validationErrors) {
@@ -406,15 +407,15 @@ export const AuthProvider = ({ children }) => {
         }
         return { success: false, message: error.response.data?.message || 'Validation failed' };
       }
-      
+
       if (error.response?.status === 401) {
         return { success: false, message: error.response.data?.message || 'Invalid credentials' };
       }
-      
+
       if (error.code === 'ERR_NETWORK') {
         return { success: false, message: 'Network error - please check your connection' };
       }
-      
+
       return { success: false, message: error.response?.data?.message || 'Login failed' };
     }
   };
@@ -425,7 +426,7 @@ export const AuthProvider = ({ children }) => {
     try {
       // Add a small delay for better UX
       await new Promise(resolve => setTimeout(resolve, 500));
-      
+
       // Call logout API if session exists
       if (sessionId) {
         await donorSessionsAPI.logout();
@@ -441,14 +442,14 @@ export const AuthProvider = ({ children }) => {
       setIsDeviceRecognized(false);
       setDeviceSessionId(null);
       setHasDonorSession(false);
-      
+
       // Clear all cached donation totals on logout
       Object.keys(localStorage).forEach(key => {
         if (key.startsWith('abu_totalDonated_')) {
           localStorage.removeItem(key);
         }
       });
-      
+
       setLogoutLoading(false);
     }
   };
@@ -479,23 +480,23 @@ export const AuthProvider = ({ children }) => {
         token: credential,
         device_session_id: deviceSessionId || null,
       };
-      
+
       console.log('Google Login - Sending data:', { token: credential?.substring(0, 20) + '...', device_session_id: dataToSend.device_session_id });
-      
+
       const response = await donorSessionsAPI.googleLogin(dataToSend);
-      
+
       console.log('Google Login - Response:', response.data);
-      
+
       if (response.data?.success && response.data?.data) {
         const { session_id: newSessionId, username: newUsername, donor, device_session_id } = response.data.data;
-        
+
         // Store session in localStorage
         localStorage.setItem('donor_session_id', newSessionId.toString());
         localStorage.setItem('donor_username', newUsername);
-        
+
         // Cache user data for optimistic restoration on refresh
         cacheUserData(donor, newUsername);
-        
+
         // Update state
         setSessionId(newSessionId.toString());
         setUsername(newUsername);
@@ -506,7 +507,7 @@ export const AuthProvider = ({ children }) => {
         if (device_session_id) {
           setDeviceSessionId(device_session_id);
         }
-        
+
         return { success: true, message: response.data.message || 'Google login successful' };
       } else {
         const errorMessage = response.data?.message || 'Google login failed';
@@ -517,10 +518,10 @@ export const AuthProvider = ({ children }) => {
       console.error('Google login error:', error);
       console.error('Error response:', error.response?.data);
       console.error('Error status:', error.response?.status);
-      
+
       // Extract detailed error message
       let errorMessage = 'Google login failed. Please try again.';
-      
+
       if (error.response?.status === 500) {
         errorMessage = error.response?.data?.message || 'Server error occurred. Please contact support or try again later.';
       } else if (error.response?.status === 401) {
@@ -530,7 +531,7 @@ export const AuthProvider = ({ children }) => {
       } else if (error.message) {
         errorMessage = error.message;
       }
-      
+
       return { success: false, message: errorMessage, error: error };
     }
   };
@@ -551,7 +552,7 @@ export const AuthProvider = ({ children }) => {
           console.error('Google Register - Invalid JWT format (not 3 parts)');
           return { success: false, message: 'Invalid Google token format' };
         }
-        
+
         // Decode payload (base64url decode)
         const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
         console.log('Google Register - Token payload:', {
@@ -592,27 +593,27 @@ export const AuthProvider = ({ children }) => {
         token: credential,
         device_session_id: deviceSessionId || null,
       };
-      
-      console.log('Google Register - Sending data:', { 
+
+      console.log('Google Register - Sending data:', {
         token_length: credential.length,
         token_preview: credential.substring(0, 30) + '...',
-        device_session_id: dataToSend.device_session_id 
+        device_session_id: dataToSend.device_session_id
       });
-      
+
       const response = await donorSessionsAPI.googleRegister(dataToSend);
-      
+
       console.log('Google Register - Response:', response.data);
-      
+
       if (response.data?.success && response.data?.data) {
         const { session_id: newSessionId, username: newUsername, donor, device_session_id } = response.data.data;
-        
+
         // Store session in localStorage
         localStorage.setItem('donor_session_id', newSessionId.toString());
         localStorage.setItem('donor_username', newUsername);
-        
+
         // Cache user data for optimistic restoration on refresh
         cacheUserData(donor, newUsername);
-        
+
         // Update state - ensure all state is set synchronously
         setSessionId(newSessionId.toString());
         setUsername(newUsername);
@@ -623,21 +624,21 @@ export const AuthProvider = ({ children }) => {
         if (device_session_id) {
           setDeviceSessionId(device_session_id);
         }
-        
+
         console.log('Google Register - State updated:', {
           sessionId: newSessionId,
           username: newUsername,
           isAuthenticated: true,
           user: donor
         });
-        
+
         // Force a state update by triggering a re-render
         // This ensures the useEffect in Register.js picks up the authentication change
         setTimeout(() => {
           console.log('Google Register - Triggering state refresh...');
           // The state is already set, but we'll log to confirm
         }, 100);
-        
+
         return { success: true, message: response.data.message || 'Google registration successful' };
       } else {
         const errorMessage = response.data?.message || 'Google registration failed';
@@ -648,10 +649,10 @@ export const AuthProvider = ({ children }) => {
       console.error('Google register error:', error);
       console.error('Error response:', error.response?.data);
       console.error('Error status:', error.response?.status);
-      
+
       // Extract detailed error message
       let errorMessage = 'Google registration failed. Please try again.';
-      
+
       if (error.response?.status === 500) {
         // Check if it's a backend implementation issue
         const backendError = error.response?.data?.message || error.response?.data?.exception || '';
@@ -669,7 +670,7 @@ export const AuthProvider = ({ children }) => {
         } else {
           errorMessage = backendMsg || 'Invalid or expired Google token. Please try signing in with Google again.';
         }
-        
+
         console.error('Google Register - 401 Error Details:', {
           message: backendMsg,
           full_response: error.response?.data,
@@ -682,7 +683,7 @@ export const AuthProvider = ({ children }) => {
       } else if (error.message) {
         errorMessage = error.message;
       }
-      
+
       return { success: false, message: errorMessage, error: error };
     }
   };
@@ -691,18 +692,18 @@ export const AuthProvider = ({ children }) => {
   const createDonor = async (donorData) => {
     try {
       const response = await api.post('/api/donors', donorData);
-      
+
       if (response.data.success) {
         const donor = response.data.donor;
         setUser(donor);
         setIsDeviceRecognized(true);
-        
+
         // Create device session
         await api.post('/api/device/session', {
           device_fingerprint: getDeviceFingerprint(),
           donor_id: donor.id
         });
-        
+
         return { success: true, donor };
       } else {
         const message = response.data.message || 'Failed to create account';
@@ -724,23 +725,23 @@ export const AuthProvider = ({ children }) => {
       // Log what we're sending to verify structure
       console.log('AuthContext: Updating donor with ID:', donorId);
       console.log('AuthContext: Sending data to backend:', JSON.stringify(donorData, null, 2));
-      
+
       if (donorData.name || donorData.surname || donorData.other_name) {
         console.log('AuthContext: Name fields being sent:');
         console.log('- name:', donorData.name);
         console.log('- surname:', donorData.surname);
         console.log('- other_name:', donorData.other_name);
       }
-      
+
       const response = await api.put(`/api/donors/${donorId}`, donorData);
-      
+
       if (response.data.success) {
         const donor = response.data.donor || response.data.data || response.data.data?.donor;
         if (donor) {
           setUser(donor);
           setIsDeviceRecognized(true);
         }
-        
+
         // Create device session (handle different response structures)
         const donorIdForSession = donor?.id || donorId;
         if (donorIdForSession) {
@@ -754,7 +755,7 @@ export const AuthProvider = ({ children }) => {
             console.log('Device session creation skipped:', sessionError);
           }
         }
-        
+
         return { success: true, donor: donor || user };
       } else {
         const message = response.data.message || 'Failed to update profile';
@@ -763,7 +764,7 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Update donor error:', error);
       console.error('Error response:', error.response?.data);
-      
+
       // Handle validation errors (422)
       if (error.response?.status === 422) {
         const validationErrors = error.response.data.errors;
@@ -774,19 +775,19 @@ export const AuthProvider = ({ children }) => {
             const messageArray = Array.isArray(messages) ? messages : [messages];
             return `${field}: ${messageArray.join(', ')}`;
           }).join('; ');
-          
-          return { 
-            success: false, 
+
+          return {
+            success: false,
             message: errorMessages || 'Validation failed',
             errors: validationErrors // Return errors object for field-specific display
           };
         }
-        return { 
-          success: false, 
-          message: error.response.data.message || 'Validation failed' 
+        return {
+          success: false,
+          message: error.response.data.message || 'Validation failed'
         };
       }
-      
+
       const message = error.response?.data?.message || 'Failed to update profile';
       return { success: false, message };
     }
