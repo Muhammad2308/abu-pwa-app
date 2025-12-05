@@ -279,34 +279,6 @@ export const AuthProvider = ({ children }) => {
       const dataToSend = {
         ...registerData,
         device_session_id: deviceSessionId || registerData.device_session_id || null,
-      };
-
-      const response = await donorSessionsAPI.register(dataToSend);
-
-      if (response.data?.success && response.data?.data) {
-        const { id: newSessionId, username: newUsername, donor, device_session_id } = response.data.data;
-
-        // Store session in localStorage
-        localStorage.setItem('donor_session_id', newSessionId.toString());
-        localStorage.setItem('donor_username', newUsername);
-
-        // Cache user data for optimistic restoration on refresh
-        cacheUserData(donor, newUsername);
-
-        // Update state
-        setSessionId(newSessionId.toString());
-        setUsername(newUsername);
-        setUser(donor);
-        setIsAuthenticated(true);
-        setIsDeviceRecognized(true);
-        setHasDonorSession(true);
-        if (device_session_id) {
-          setDeviceSessionId(device_session_id);
-        }
-
-        return { success: true, message: response.data.message || 'Registration successful' };
-      } else {
-        return { success: false, message: response.data?.message || 'Registration failed' };
       }
     } catch (error) {
       console.error('Registration error:', error);
