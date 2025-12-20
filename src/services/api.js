@@ -51,27 +51,34 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Send email verification code
-    sendEmailVerification: (email) => api.post('/api/verification/send-email', { email }),
+    return Promise.reject(error);
+  }
+);
 
-      // Verify SMS code
-      verifySMSCode: (phone, code) => api.post('/api/verification/verify-sms', { phone, code }),
+export const verificationAPI = {
+  // Send email verification code
+  sendEmailVerification: (email) => api.post('/api/verification/send-email', { email }),
 
-        // Verify email code
-        verifyEmailCode: (email, code) => api.post('/api/verification/verify-email', { email, code }),
+  // Verify SMS code
+  verifySMSCode: (phone, code) => api.post('/api/verification/verify-sms', { phone, code }),
 
-          // Create device session after verification
-          createDeviceSession: (sessionData) => api.post('/api/session/create', sessionData),
+  // Verify email code
+  verifyEmailCode: (email, code) => api.post('/api/verification/verify-email', { email, code }),
+};
 
-            // Check if device is recognized
-            checkDeviceSession: (deviceInfo) => api.post('/api/session/check', deviceInfo),
+export const sessionAPI = {
+  // Create device session after verification
+  createDeviceSession: (sessionData) => api.post('/api/session/create', sessionData),
 
-              // Login with device session
-              loginWithDevice: (credentials) => api.post('/api/session/login', credentials),
+  // Check if device is recognized
+  checkDeviceSession: (deviceInfo) => api.post('/api/session/check', deviceInfo),
 
-                // Logout device session
-                logout: () => api.post('/api/session/logout'),
-        };
+  // Login with device session
+  loginWithDevice: (credentials) => api.post('/api/session/login', credentials),
+
+  // Logout device session
+  logout: () => api.post('/api/session/logout'),
+};
 
 // Projects API calls
 export const projectsAPI = {

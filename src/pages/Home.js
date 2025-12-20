@@ -576,7 +576,7 @@ const Home = () => {
                 <span className="text-sm font-medium opacity-90">My Donations</span>
                 {isAuthenticated && user && <FaEye className="w-4 h-4 opacity-75" />}
               </div>
-              {/* Right: User Name and Transaction History */}
+              {/* Right: User Name */}
               <div className="flex items-center gap-3">
                 {/* User Name */}
                 {isAuthenticated && user && (user.name || user.surname) && (
@@ -586,20 +586,6 @@ const Home = () => {
                     </p>
                   </div>
                 )}
-                {/* Transaction History - Always visible */}
-                <button
-                  onClick={() => {
-                    if (isAuthenticated && user) {
-                      setShowHistoryModal(true);
-                    } else {
-                      toast.info('Please login to view your transaction history');
-                    }
-                  }}
-                  className="flex items-center gap-1 text-sm font-medium opacity-90 hover:opacity-100 transition-opacity"
-                >
-                  <span>History</span>
-                  <FaChevronRight className="w-3 h-3" />
-                </button>
               </div>
             </div>
             {/* Balance Amount */}
@@ -627,8 +613,33 @@ const Home = () => {
                 <span className="text-white opacity-80 font-semibold">Tier 3</span>
               </div>
             </div>
-            {/* Bottom Section: Donate Button */}
-            <div className="flex justify-end">
+            {/* Bottom Section: History Badge and Donate Button */}
+            <div className="flex justify-between items-center">
+              {/* Donations History Badge - Left Side */}
+              <button
+                onClick={() => {
+                  if (isAuthenticated && user) {
+                    setShowHistoryModal(true);
+                  } else {
+                    toast.info('Please login to view your transaction history');
+                  }
+                }}
+                className="flex items-center gap-2 px-3 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-xl border border-white border-opacity-30 transition-all duration-300 hover:scale-105 shadow-md hover:shadow-lg group relative"
+              >
+                <div className="relative">
+                  <ClockIcon className="w-4 h-4 text-white group-hover:rotate-12 transition-transform duration-300" />
+                  {isAuthenticated && user && totalDonated > 0 && (
+                    <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-400 rounded-full border-2 border-white border-opacity-20 animate-pulse"></span>
+                  )}
+                </div>
+                <span className="text-sm font-semibold text-white">History</span>
+                {isAuthenticated && user && totalDonated > 0 && (
+                  <span className="px-2 py-0.5 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full text-xs font-bold text-white shadow-sm">
+                    Active
+                  </span>
+                )}
+              </button>
+              {/* Donate Button - Right Side */}
               <button
                 onClick={() => {
                   if (isAuthenticated && user) {
@@ -639,7 +650,7 @@ const Home = () => {
                 }}
                 className="bg-white text-blue-600 px-6 py-3 rounded-xl font-bold text-sm shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 flex items-center gap-2"
               >
-                <FaHandHoldingHeart className="text-base" />
+                <FaHandHoldingHeart className="text-xs" />
                 <span>Donate</span>
               </button>
             </div>
@@ -1010,7 +1021,7 @@ const Home = () => {
                     });
                     const projectName = donation.project?.project_title || donation.project_title || 'Endowment Fund';
                     const isProject = donation.project_id || donation.project?.id;
-                    const isSuccess = donation.status === 'success' || !donation.status;
+                    const isSuccess = donation.status === 'success' || donation.status === 'completed' || !donation.status;
 
                     return (
                       <div
@@ -1063,7 +1074,7 @@ const Home = () => {
                                     ? 'bg-yellow-100 text-yellow-700'
                                     : 'bg-red-100 text-red-700'
                                   }`}>
-                                  {isSuccess ? '✓ Success' : donation.status?.toUpperCase() || 'SUCCESS'}
+                                  {donation.status === 'completed' ? '✓ Completed' : isSuccess ? '✓ Success' : donation.status?.toUpperCase() || 'SUCCESS'}
                                 </div>
                               </div>
                             </div>
