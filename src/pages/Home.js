@@ -227,7 +227,11 @@ const Home = () => {
     // Add icon_image first if it exists
     const iconImage = project.icon_image || project.icon_image_path;
     if (iconImage && iconImage.trim() !== '') {
-      images.push(normalizeImagePath(iconImage));
+      images.push({
+        url: normalizeImagePath(iconImage),
+        title: project.project_title,
+        description: project.project_description
+      });
     }
 
     // Add all body_images from project_photos
@@ -237,8 +241,12 @@ const Home = () => {
         if (bodyImage && bodyImage.trim() !== '') {
           const normalized = normalizeImagePath(bodyImage);
           // Avoid duplicates (in case icon_image is same as a body_image)
-          if (normalized && !images.includes(normalized)) {
-            images.push(normalized);
+          if (normalized && !images.some(img => img.url === normalized)) {
+            images.push({
+              url: normalized,
+              title: photo.title || '',
+              description: photo.description || ''
+            });
           }
         }
       });
@@ -246,7 +254,11 @@ const Home = () => {
 
     // If no images found, return placeholder
     if (images.length === 0) {
-      return ['data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg=='];
+      return [{
+        url: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==',
+        title: 'No Image',
+        description: ''
+      }];
     }
 
     return images;
@@ -1151,15 +1163,26 @@ const Home = () => {
                 </>
               )}
 
-              {/* Large Image */}
-              <img
-                src={getAllProjectImages(selectedProject)[selectedImageIndex]}
-                alt={`${selectedProject.project_title} - Image ${selectedImageIndex + 1}`}
-                className="max-w-full max-h-[60vh] object-contain rounded-lg"
-                onError={(e) => {
-                  e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
-                }}
-              />
+                            {/* Large Image */}
+              <div className="relative max-w-full max-h-[60vh]">
+                <img
+                  src={getAllProjectImages(selectedProject)[selectedImageIndex].url}
+                  alt={`${selectedProject.project_title} - Image ${selectedImageIndex + 1}`}
+                  className="max-w-full max-h-[60vh] object-contain rounded-lg"
+                  onError={(e) => {
+                    e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
+                  }}
+                />
+                {/* Title and Description Overlay */}
+                <div className="absolute bottom-0 left-0 right-0 h-1/2 bg-gradient-to-t from-black via-black/70 to-transparent p-6 text-white flex flex-col justify-end rounded-b-lg">
+                  <h3 className="text-xl font-bold mb-2 drop-shadow-md">
+                    {getAllProjectImages(selectedProject)[selectedImageIndex].title}
+                  </h3>
+                  <p className="text-sm opacity-90 drop-shadow-md line-clamp-4">
+                    {getAllProjectImages(selectedProject)[selectedImageIndex].description}
+                  </p>
+                </div>
+              </div>
             </div>
             {/* Thumbnail Gallery */}
             <div className="p-4 bg-gray-50 border-t border-gray-200">
@@ -1174,7 +1197,7 @@ const Home = () => {
                       }`}
                   >
                     <img
-                      src={image}
+                      src={image.url}
                       alt={`Thumbnail ${index + 1}`}
                       className={`w-full h-full object-cover transition-opacity ${selectedImageIndex === index ? 'opacity-100' : 'opacity-70 hover:opacity-100'
                         }`}
