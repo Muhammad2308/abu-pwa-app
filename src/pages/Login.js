@@ -9,7 +9,7 @@ import { GoogleSignInButton } from '../hooks/useGoogleAuth';
 const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, googleLogin, isAuthenticated, loading, user, isDeviceRecognized, hasDonorSession } = useAuth();
+  const { login, googleLogin, isAuthenticated, loading, user, isDeviceRecognized, hasDonorSession, checkSession } = useAuth();
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const hasRedirected = useRef(false);
 
@@ -96,9 +96,9 @@ const Login = () => {
         // Show error message - if it's a Google account error, show it prominently
         const errorMsg = result.message || 'Login failed';
         const isGoogleAccountError = errorMsg.toLowerCase().includes('google');
-        
+
         if (isGoogleAccountError) {
-          toast.error(errorMsg, { 
+          toast.error(errorMsg, {
             duration: 6000,
             icon: '🔵',
           });
@@ -123,12 +123,14 @@ const Login = () => {
       const result = await googleLogin(idToken);
       if (result.success) {
         toast.success(result.message || 'Google login successful!');
+        // Ensure session is fully loaded
+        await checkSession();
         setIsRedirecting(true);
         // Wait for state to be fully updated before navigation
         setTimeout(() => {
           const redirectTo = location.state?.from?.pathname || '/';
           navigate(redirectTo, { replace: true });
-        }, 300);
+        }, 500);
       } else {
         // Show detailed error message
         const errorMsg = result.message || 'Google login failed';
@@ -162,7 +164,7 @@ const Login = () => {
           <div className="flex items-center justify-center mb-4">
             <img src={abuLogo} alt="ABU Logo" className="h-16 w-auto" />
             <div className="flex flex-col justify-center ml-3 h-16 text-left">
-              <span className="text-sm font-bold leading-tight text-gray-800" style={{lineHeight: '1.1'}}>ABU Endowment</span>
+              <span className="text-sm font-bold leading-tight text-gray-800" style={{ lineHeight: '1.1' }}>ABU Endowment</span>
               <span className="text-xs font-bold text-gray-800 leading-none">& Crowd Funding</span>
             </div>
           </div>
@@ -196,9 +198,8 @@ const Login = () => {
                 name="email"
                 value={formData.email}
                 onChange={handleChange}
-                className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                  errors.email ? 'border-red-500' : 'border-gray-300'
-                }`}
+                className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${errors.email ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 placeholder="Enter your email"
                 disabled={isSubmitting}
               />
@@ -223,9 +224,8 @@ const Login = () => {
                 name="password"
                 value={formData.password}
                 onChange={handleChange}
-                className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                  errors.password ? 'border-red-500' : 'border-gray-300'
-                }`}
+                className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${errors.password ? 'border-red-500' : 'border-gray-300'
+                  }`}
                 placeholder="Enter your password"
                 disabled={isSubmitting}
               />

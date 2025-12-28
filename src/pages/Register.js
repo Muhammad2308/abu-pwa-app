@@ -134,23 +134,23 @@ const Register = () => {
         ...prev,
         [name]: value
       };
-      
+
       // Reset dependent fields when entry_year changes
       if (name === 'entry_year') {
         newData.faculty_id = '';
         newData.department_id = '';
         setAvailableDepartments([]);
       }
-      
+
       // Reset department when faculty changes
       if (name === 'faculty_id') {
         newData.department_id = '';
         setAvailableDepartments([]);
       }
-      
+
       return newData;
     });
-    
+
     // Clear error for this field when user starts typing
     if (errors[name]) {
       setErrors(prev => ({
@@ -251,9 +251,9 @@ const Register = () => {
         password: formData.password,
         donor_id: null,
       };
-      
+
       console.log('Registering user session with data:', registerData);
-      
+
       const result = await register(registerData);
 
       if (result.success) {
@@ -267,7 +267,7 @@ const Register = () => {
         }));
       } else {
         toast.error(result.message || 'Registration failed');
-        
+
         // If there are field-level errors, map them to form fields
         if (result.errors) {
           const fieldErrors = {};
@@ -283,7 +283,7 @@ const Register = () => {
     } catch (error) {
       console.error('Registration error:', error);
       console.error('Error response:', error.response?.data);
-      
+
       // Handle validation errors
       if (error.response?.status === 422) {
         const validationErrors = error.response.data?.errors || {};
@@ -293,9 +293,9 @@ const Register = () => {
             return `${field}: ${message}`;
           })
           .join(', ');
-        
+
         toast.error(`Validation error: ${errorMessages}`);
-        
+
         // Map backend errors to form fields
         const fieldErrors = {};
         Object.keys(validationErrors).forEach(field => {
@@ -359,8 +359,8 @@ const Register = () => {
 
       let donorId = null;
       if (response.data?.success) {
-        donorId = response.data.data?.id 
-          || response.data.data?.donor?.id 
+        donorId = response.data.data?.id
+          || response.data.data?.donor?.id
           || response.data.id;
       } else if (response.data?.data?.id) {
         donorId = response.data.data.id;
@@ -416,38 +416,41 @@ const Register = () => {
       console.log('Starting Google registration...');
       const result = await googleRegister(idToken);
       console.log('Google registration result:', result);
-      
+
       if (result.success) {
         toast.success(result.message || 'Google registration successful!');
-        console.log('Registration successful, navigating to home...');
+        console.log('Registration successful, checking session...');
+        // Ensure session is fully loaded
+        await checkSession();
         setIsRedirecting(true);
-        
+
         // Wait for state to be fully updated, then navigate
         setTimeout(() => {
           console.log('Navigating to home page...');
           navigate('/', { replace: true });
-        }, 300);
+        }, 500);
       } else {
         // Check if it's a 409 (account already exists) - automatically try login instead
         if (result.error?.response?.status === 409) {
           console.log('Account already exists, attempting automatic login...');
-          toast('Account already exists. Logging you in...', { 
+          toast('Account already exists. Logging you in...', {
             duration: 3000,
             icon: 'ℹ️'
           });
-          
+
           // Try to login with the same Google token
           try {
             const loginResult = await googleLogin(idToken);
-            
+
             if (loginResult.success) {
               toast.success('Successfully logged in!');
+              // Ensure session is fully loaded
+              await checkSession();
               setIsRedirecting(true);
-              // Wait a bit longer to ensure state is fully updated before navigation
+              // Navigate using React Router instead of window.location
               setTimeout(() => {
-                // Force navigation to home
-                window.location.href = '/';
-              }, 800);
+                navigate('/', { replace: true });
+              }, 500);
             } else {
               // If login also fails, redirect to login page
               toast.error(loginResult.message || 'Please login manually');
@@ -465,30 +468,30 @@ const Register = () => {
         } else {
           // Show detailed error message for other errors
           const errorMsg = result.message || 'Google registration failed';
-          
+
           // Show more helpful error messages
           if (errorMsg.includes('email') && errorMsg.includes('verified')) {
-            toast.error('Please verify your Google email first, then try again.', { 
+            toast.error('Please verify your Google email first, then try again.', {
               duration: 8000,
               icon: '📧',
             });
           } else if (errorMsg.includes('expired')) {
-            toast.error('Google sign-in expired. Please try again.', { 
+            toast.error('Google sign-in expired. Please try again.', {
               duration: 6000,
               icon: '⏰',
             });
           } else if (errorMsg.includes('Invalid') || errorMsg.includes('token')) {
-            toast.error('Google sign-in failed. Please try signing in with Google again.', { 
+            toast.error('Google sign-in failed. Please try signing in with Google again.', {
               duration: 6000,
               icon: '🔐',
             });
           } else {
             toast.error(errorMsg, { duration: 6000 });
           }
-          
+
           console.error('Registration failed:', errorMsg, result.error);
         }
-        
+
         // If it's a 401, suggest trying again
         if (result.error?.response?.status === 401) {
           console.log('401 error - Token verification failed. This could be a backend issue.');
@@ -497,7 +500,7 @@ const Register = () => {
           console.log('2. Verify GOOGLE_CLIENT_ID matches in backend .env');
           console.log('3. Check backend logs for detailed error');
         }
-        
+
         // If it's a 500 error with backend implementation issue, show helpful message
         if (result.error?.response?.status === 500) {
           const backendError = result.error?.response?.data?.message || result.error?.response?.data?.exception || '';
@@ -542,7 +545,7 @@ const Register = () => {
           <div className="flex items-center justify-center mb-4">
             <img src={abuLogo} alt="ABU Logo" className="h-16 w-auto" />
             <div className="flex flex-col justify-center ml-3 h-16 text-left">
-              <span className="text-sm font-bold leading-tight text-gray-800" style={{lineHeight: '1.1'}}>ABU Endowment</span>
+              <span className="text-sm font-bold leading-tight text-gray-800" style={{ lineHeight: '1.1' }}>ABU Endowment</span>
               <span className="text-xs font-bold text-gray-800 leading-none">& Crowd Funding</span>
             </div>
           </div>
@@ -568,9 +571,8 @@ const Register = () => {
                   name="email"
                   value={formData.email}
                   onChange={handleChange}
-                  className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                    errors.email ? 'border-red-500' : 'border-gray-300'
-                  }`}
+                  className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${errors.email ? 'border-red-500' : 'border-gray-300'
+                    }`}
                   placeholder="Enter your email address"
                   disabled={isSubmitting}
                   required
@@ -598,9 +600,8 @@ const Register = () => {
                     name="password"
                     value={formData.password}
                     onChange={handleChange}
-                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                      errors.password ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${errors.password ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     placeholder="Create password"
                     disabled={isSubmitting}
                     required
@@ -626,9 +627,8 @@ const Register = () => {
                     name="password_confirmation"
                     value={formData.password_confirmation}
                     onChange={handleChange}
-                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                      errors.password_confirmation ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${errors.password_confirmation ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     placeholder="Confirm password"
                     disabled={isSubmitting}
                     required
@@ -715,9 +715,8 @@ const Register = () => {
                   name="donor_type"
                   value={formData.donor_type}
                   onChange={handleChange}
-                  className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                    errors.donor_type ? 'border-red-500' : 'border-gray-300'
-                  }`}
+                  className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.donor_type ? 'border-red-500' : 'border-gray-300'
+                    }`}
                   disabled={isSubmitting}
                 >
                   <option value="Alumni">Alumni</option>
@@ -745,9 +744,8 @@ const Register = () => {
                       name="organization_name"
                       value={formData.organization_name}
                       onChange={handleChange}
-                      className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                        errors.organization_name ? 'border-red-500' : 'border-gray-300'
-                      }`}
+                      className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${errors.organization_name ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       placeholder="Enter organization name"
                       disabled={isSubmitting}
                     />
@@ -775,9 +773,8 @@ const Register = () => {
                         name="registration_number"
                         value={formData.registration_number}
                         onChange={handleChange}
-                        className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                          errors.registration_number ? 'border-red-500' : 'border-gray-300'
-                        }`}
+                        className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${errors.registration_number ? 'border-red-500' : 'border-gray-300'
+                          }`}
                         placeholder="Enter your registration number"
                         disabled={isSubmitting}
                       />
@@ -801,9 +798,8 @@ const Register = () => {
                           name="entry_year"
                           value={formData.entry_year}
                           onChange={handleChange}
-                          className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                            errors.entry_year ? 'border-red-500' : 'border-gray-300'
-                          }`}
+                          className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.entry_year ? 'border-red-500' : 'border-gray-300'
+                            }`}
                           disabled={isSubmitting || loadingFaculties}
                         >
                           <option value="">Select entry year</option>
@@ -832,9 +828,8 @@ const Register = () => {
                           name="graduation_year"
                           value={formData.graduation_year}
                           onChange={handleChange}
-                          className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                            errors.graduation_year ? 'border-red-500' : 'border-gray-300'
-                          }`}
+                          className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.graduation_year ? 'border-red-500' : 'border-gray-300'
+                            }`}
                           disabled={isSubmitting}
                         >
                           <option value="">Select graduation year</option>
@@ -862,19 +857,18 @@ const Register = () => {
                         name="faculty_id"
                         value={formData.faculty_id}
                         onChange={handleChange}
-                        className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.faculty_id ? 'border-red-500' : 'border-gray-300'
-                        }`}
+                        className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.faculty_id ? 'border-red-500' : 'border-gray-300'
+                          }`}
                         disabled={isSubmitting || loadingFaculties || !formData.entry_year}
                       >
                         <option value="">
-                          {!formData.entry_year 
-                            ? 'Please select entry year first' 
-                            : loadingFaculties 
-                            ? 'Loading faculties...' 
-                            : availableFaculties.length === 0 
-                            ? 'No faculties available for this entry year' 
-                            : 'Select faculty'}
+                          {!formData.entry_year
+                            ? 'Please select entry year first'
+                            : loadingFaculties
+                              ? 'Loading faculties...'
+                              : availableFaculties.length === 0
+                                ? 'No faculties available for this entry year'
+                                : 'Select faculty'}
                         </option>
                         {availableFaculties.map(faculty => (
                           <option key={faculty.id} value={faculty.id}>
@@ -904,21 +898,20 @@ const Register = () => {
                         name="department_id"
                         value={formData.department_id}
                         onChange={handleChange}
-                        className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                          errors.department_id ? 'border-red-500' : 'border-gray-300'
-                        }`}
+                        className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errors.department_id ? 'border-red-500' : 'border-gray-300'
+                          }`}
                         disabled={isSubmitting || loadingDepartments || !formData.entry_year || !formData.faculty_id}
                       >
                         <option value="">
-                          {!formData.entry_year 
-                            ? 'Please select entry year first' 
-                            : !formData.faculty_id 
-                            ? 'Please select faculty first' 
-                            : loadingDepartments 
-                            ? 'Loading departments...' 
-                            : availableDepartments.length === 0 
-                            ? 'No departments available for this faculty and entry year' 
-                            : 'Select department'}
+                          {!formData.entry_year
+                            ? 'Please select entry year first'
+                            : !formData.faculty_id
+                              ? 'Please select faculty first'
+                              : loadingDepartments
+                                ? 'Loading departments...'
+                                : availableDepartments.length === 0
+                                  ? 'No departments available for this faculty and entry year'
+                                  : 'Select department'}
                         </option>
                         {availableDepartments.map(department => (
                           <option key={department.id} value={department.id}>
@@ -952,9 +945,8 @@ const Register = () => {
                       name="name"
                       value={formData.name}
                       onChange={handleChange}
-                      className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                        errors.name ? 'border-red-500' : 'border-gray-300'
-                      }`}
+                      className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${errors.name ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       placeholder="First name"
                       disabled={isSubmitting}
                     />
@@ -977,9 +969,8 @@ const Register = () => {
                       name="surname"
                       value={formData.surname}
                       onChange={handleChange}
-                      className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                        errors.surname ? 'border-red-500' : 'border-gray-300'
-                      }`}
+                      className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${errors.surname ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       placeholder="Surname"
                       disabled={isSubmitting}
                     />
@@ -1024,9 +1015,8 @@ const Register = () => {
                     name="email"
                     value={formData.email}
                     onChange={handleChange}
-                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                      errors.email ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${errors.email ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     placeholder="Enter your email address"
                     disabled={isSubmitting}
                   />
@@ -1050,9 +1040,8 @@ const Register = () => {
                     name="phone"
                     value={formData.phone}
                     onChange={handleChange}
-                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                      errors.phone ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${errors.phone ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     placeholder="+2348012345678"
                     disabled={isSubmitting}
                   />
@@ -1079,9 +1068,8 @@ const Register = () => {
                     value={formData.address}
                     onChange={handleChange}
                     rows={3}
-                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                      errors.address ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${errors.address ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     placeholder="Enter your address"
                     disabled={isSubmitting}
                   />
@@ -1106,9 +1094,8 @@ const Register = () => {
                       name="state"
                       value={formData.state}
                       onChange={handleChange}
-                      className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                        errors.state ? 'border-red-500' : 'border-gray-300'
-                      }`}
+                      className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${errors.state ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       placeholder="Enter state"
                       disabled={isSubmitting}
                     />
@@ -1131,9 +1118,8 @@ const Register = () => {
                       name="city"
                       value={formData.city}
                       onChange={handleChange}
-                      className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                        errors.city ? 'border-red-500' : 'border-gray-300'
-                      }`}
+                      className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${errors.city ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       placeholder="Enter city"
                       disabled={isSubmitting}
                     />
@@ -1158,9 +1144,8 @@ const Register = () => {
                     name="email"
                     value={formData.email}
                     onChange={handleChange}
-                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                      errors.email ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${errors.email ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     placeholder="Enter your email address"
                     disabled={isSubmitting}
                   />
@@ -1184,9 +1169,8 @@ const Register = () => {
                     name="password"
                     value={formData.password}
                     onChange={handleChange}
-                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                      errors.password ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${errors.password ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     placeholder="Create a password (min 6 characters)"
                     disabled={isSubmitting}
                   />
@@ -1210,9 +1194,8 @@ const Register = () => {
                     name="password_confirmation"
                     value={formData.password_confirmation}
                     onChange={handleChange}
-                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${
-                      errors.password_confirmation ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all ${errors.password_confirmation ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     placeholder="Confirm your password"
                     disabled={isSubmitting}
                   />

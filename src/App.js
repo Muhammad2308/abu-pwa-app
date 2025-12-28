@@ -19,6 +19,7 @@ const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const AddressableAlumni = lazy(() => import('./pages/register/AddressableAlumni'));
 const NonAddressableAlumni = lazy(() => import('./pages/register/NonAddressableAlumni'));
 const Friends = lazy(() => import('./pages/register/Friends'));
+const RegistrationTest = lazy(() => import('./components/RegistrationTest'));
 
 
 function App() {
@@ -76,6 +77,11 @@ function App() {
               element={
                 <Layout><Donations /></Layout>
               }
+            />
+            {/* Registration Test - Development only */}
+            <Route
+              path="/test-registration"
+              element={<RegistrationTest />}
             />
           </Routes>
         </Suspense>
