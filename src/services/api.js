@@ -6,7 +6,7 @@ const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:800
 // Create axios instance with base configuration
 const api = axios.create({
   baseURL: API_BASE_URL,
-  withCredentials: true, // This is correct!
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
@@ -26,10 +26,14 @@ api.interceptors.request.use(
     const deviceSession = localStorage.getItem('device_session');
 
     if (sessionId) {
-      // Donor session authentication - session_id is sent in request body for /me endpoint
-      // For other endpoints, we might need to add it as a header if backend requires it
-      // For now, /me endpoint expects it in body, other endpoints may use it differently
-    } else if (token) {
+      config.headers['X-Session-ID'] = sessionId;
+      // Also add to params for GET requests if needed
+      if (config.method === 'get') {
+        config.params = { ...config.params, session_id: sessionId };
+      }
+    }
+
+    if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     } else if (deviceSession) {
       config.headers['X-Device-Session'] = deviceSession;
@@ -136,6 +140,7 @@ export const donorsAPI = {
       },
     });
   },
+  getAll: (search = '') => api.get('/api/donors', { params: { search } }),
 };
 
 // Donor Sessions API calls (Authentication)
@@ -157,6 +162,15 @@ export const donorSessionsAPI = {
   validateResetToken: (token) => api.get(`/api/donor-sessions/reset/${token}`),
   resetPasswordWithToken: (token, password, password_confirmation) =>
     api.post(`/api/donor-sessions/reset/${token}`, { password, password_confirmation }),
+};
+
+// Messages API calls
+export const messagesAPI = {
+  getReceived: () => api.get('/api/messages/received'),
+  getSent: () => api.get('/api/messages/sent'),
+  send: (data) => api.post('/api/messages', data), // data: { receiver_id, content }
+  markAsRead: (id) => api.put(`/api/messages/${id}/read`),
+  getUnreadCount: () => api.get('/api/messages/unread-count'),
 };
 
 // Utility functions

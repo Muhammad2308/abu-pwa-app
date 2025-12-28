@@ -46,6 +46,25 @@ code {
   box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
 }
 
+/* Custom Colors and Utilities */
+:root {
+  --abu-green: #00875A;
+  --abu-green-dark: #00704A;
+  --abu-green-light: #E6F3EF;
+}
+
+.bg-abu-green {
+  background-color: var(--abu-green);
+}
+
+.text-abu-green {
+  color: var(--abu-green);
+}
+
+.border-abu-green {
+  border-color: var(--abu-green);
+}
+
 /* Loading animation */
 .loading-spinner {
   border: 2px solid #f3f4f6;
@@ -57,16 +76,49 @@ code {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
-/* Infinite slider animation */
-@keyframes slideLeft {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(-33.333%);
-  }
+/* Custom Card Styles */
+.dashboard-card {
+  background: white;
+  border-radius: 24px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+}
+
+.project-card {
+  background: white;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(0, 135, 90, 0.2);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 135, 90, 0.4);
+}
+
+.project-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
 }
