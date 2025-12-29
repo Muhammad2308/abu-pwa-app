@@ -45,6 +45,12 @@ This page provides automated tests for:
   - Database schema validation
   - Testing checklist
 
+### 4. Google Login Duplicate Session Error ✅ RESOLVED
+**Problem:** `POST /api/donor-sessions/google-login` threw 500 error when session already existed.
+
+**Solution:** Backend updated to update existing sessions instead of creating duplicates.
+- See `BACKEND_IMPLEMENTATION_REPORT.md` for details.
+
 ## How to Use the Registration Test
 
 1. **Start your development server:**
