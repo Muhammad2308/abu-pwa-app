@@ -452,15 +452,36 @@ const Register = () => {
                 navigate('/', { replace: true });
               }, 500);
             } else {
-              // If login also fails, redirect to login page
-              toast.error(loginResult.message || 'Please login manually');
-              setTimeout(() => {
-                navigate('/login', { replace: true });
-              }, 2000);
+              // Check if it's a duplicate session error
+              const errorMsg = loginResult.message || loginResult.error?.response?.data?.message || '';
+              if (errorMsg.includes('UNIQUE constraint') || errorMsg.includes('already exists')) {
+                toast('Account exists. Please login with your email and password.', {
+                  duration: 5000,
+                  icon: '🔐'
+                });
+                setTimeout(() => {
+                  navigate('/login', { replace: true });
+                }, 2000);
+              } else {
+                // If login also fails, redirect to login page
+                toast.error(loginResult.message || 'Please login manually');
+                setTimeout(() => {
+                  navigate('/login', { replace: true });
+                }, 2000);
+              }
             }
           } catch (loginError) {
             console.error('Auto-login failed:', loginError);
-            toast.error('Please login manually');
+            // Check if it's a duplicate session error (500 with UNIQUE constraint)
+            const errorMsg = loginError.response?.data?.message || loginError.message || '';
+            if (errorMsg.includes('UNIQUE constraint') || errorMsg.includes('already exists')) {
+              toast('Account exists. Please login with your email and password.', {
+                duration: 5000,
+                icon: '🔐'
+              });
+            } else {
+              toast.error('Please login manually');
+            }
             setTimeout(() => {
               navigate('/login', { replace: true });
             }, 2000);

@@ -119,6 +119,81 @@ public function googleRegister(Request $request)
 }
 ```
 
+### 3. Fix Google OAuth Login - Duplicate Session Error
+**Current Issue:** `POST /api/donor-sessions/google-login` throws `UNIQUE constraint failed: donor_sessions.username` when a session already exists.
+
+**Root Cause:** The endpoint tries to create a new session without checking if one already exists for the user.
+
+**Required Fix:**
+```php
+// In GoogleAuthController or equivalent
+public function googleLogin(Request $request)
+{
+    // 1. Verify Google token
+    $googleUser = $this->verifyGoogleToken($request->token);
+    
+    // 2. Find the donor by email
+    $donor = Donor::where('email', $googleUser->email)->first();
+    
+    if (!$donor) {
+        return response()->json([
+            'success' => false,
+            'message' => 'No account found with this email. Please register first.'
+        ], 404);
+    }
+    
+    // 3. Check if a session already exists for this user
+    $existingSession = DonorSession::where('username', $googleUser->email)->first();
+    
+    if ($existingSession) {
+        // Update existing session instead of creating new one
+        $existingSession->update([
+            'device_session_id' => $request->device_session_id,
+            'auth_provider' => 'google',
+            'google_id' => $googleUser->sub,
+            'google_email' => $googleUser->email,
+            'google_name' => $googleUser->name,
+            'google_picture' => $googleUser->picture,
+            'updated_at' => now(),
+        ]);
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Login successful',
+            'data' => [
+                'session_id' => $existingSession->id,
+                'username' => $existingSession->username,
+                'donor' => $donor,
+                'device_session_id' => $existingSession->device_session_id,
+            ]
+        ]);
+    }
+    
+    // 4. Create new session if none exists
+    $session = DonorSession::create([
+        'username' => $googleUser->email,
+        'donor_id' => $donor->id,
+        'device_session_id' => $request->device_session_id,
+        'auth_provider' => 'google',
+        'google_id' => $googleUser->sub,
+        'google_email' => $googleUser->email,
+        'google_name' => $googleUser->name,
+        'google_picture' => $googleUser->picture,
+    ]);
+    
+    return response()->json([
+        'success' => true,
+        'message' => 'Login successful',
+        'data' => [
+            'session_id' => $session->id,
+            'username' => $session->username,
+            'donor' => $donor,
+            'device_session_id' => $session->device_session_id,
+        ]
+    ]);
+}
+```
+
 ### 3. Validate Donor Table Schema
 Ensure the `donors` table has the following structure:
 
